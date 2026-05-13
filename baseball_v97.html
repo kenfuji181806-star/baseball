@@ -94,10 +94,11 @@ html,body{
 
 /* FOOTER */
 #ftr{
-  height:var(--ftr-h);flex-shrink:0;
+  height:calc(var(--ftr-h) + env(safe-area-inset-bottom, 0px));flex-shrink:0;
   background:#0a0e18;border-top:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;gap:8px;
-  padding:0 10px;padding-bottom:env(safe-area-inset-bottom,0);
+  padding:0 10px;
+  padding-bottom:env(safe-area-inset-bottom, 0px);
 }
 #btn-confirm{
   flex:1;max-width:320px;height:46px;
@@ -315,7 +316,7 @@ tr:nth-child(even) td{background:#0e1220;}
 
 /* TOAST */
 #toast{
-  position:fixed;bottom:calc(var(--ftr-h) + 10px);left:50%;
+  position:fixed;bottom:calc(var(--ftr-h) + env(safe-area-inset-bottom, 0px) + 10px);left:50%;
   transform:translateX(-50%);
   background:#1a3a20;color:var(--green);
   border:1px solid var(--green);border-radius:8px;
