@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>野球詳細データ記録システム v9.1</title>
 <style>
 /* ===== VARIABLES ===== */
@@ -20,7 +20,7 @@
   --cyan:#0a6a7a;--clight:#30d4e8;
   --text:#dce8f4;--muted:#6a7a9a;--dim:#3a4a5a;
   --inp:#10141e;
-  --hdr-h:calc(44px + env(safe-area-inset-top, 0px));--ftr-h:60px;
+  --hdr-h:44px;--ftr-h:60px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{
@@ -40,7 +40,7 @@ html,body{
   background:linear-gradient(180deg,#1a2040,#10141e);
   border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:4px;
-  padding:0 8px;padding-top:env(safe-area-inset-top,0);
+  padding:0 8px;
   overflow-x:auto;overflow-y:hidden;
 }
 #hdr::-webkit-scrollbar{display:none;}
