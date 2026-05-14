@@ -1828,12 +1828,32 @@ function syncRPDiamond(){
 }
 
 function confirmRunnerPlace(){
-  // 打者を配置に追加
-  if(rpBatterBase!==null&&rpBatterBase<3){
+  // 打者を配置に追加（安打等で打者が出塁する場合）
+  if(rpBatterBase!==null && rpBatterBase<3){
     rpState[rpBatterBase]=true;
   }
-  // 本塁打の場合は得点加算はdoCommitで
   G.runners=[...rpState];
+
+  // 走者移動モーダル経由の場合：打者を進めずランナー・アウトのみ更新
+  if(fromRunnerMove){
+    const type=fromRunnerMove;
+    fromRunnerMove='';
+    pendingResult='';
+    pendingFinalResult='';
+
+    const isOut=type.includes('死')||type==='挟殺';
+    if(isOut){
+      G.outs++;
+      if(G.outs>=3){ saveG();refreshSB();changeHalf();return; }
+    }
+    if(rbi=>0) G.score[G.half]+=0; // 走者移動では得点変動なし（暴投等のrbiは0）
+    saveG();refreshSB();
+    toast(`✅ ${type}`);
+    showView('pitch');
+    return;
+  }
+
+  // 通常の打席結果（安打・出塁系）
   const _v = (id,def='') => { try{ const e=document.getElementById(id); return e?e.value:def; }catch(e){return def;} };
   const rbi  = parseInt(_v('inp-rbi-hd') || _v('inp-rbi','0')) || 0;
   const hitq = _v('sel-hitq');
@@ -1916,7 +1936,8 @@ const OUT_SET=new Set(['ゴロアウト','フライアウト','ライナーア�
   '盗塁死','牽制アウト','走塁死（挟殺等）','守備妨害','打撃妨害',
   '犠打','犠飛','振り逃げ','振り逃げ（アウト）']);
 // カウントのみ変化（打者継続）
-const COUNT_ONLY=new Set(['ファウル','ボール','ストライク','見逃し','空振り']);
+const COUNT_ONLY=new Set(['ファウル','ボール','ストライク','見逃し','空振り',
+  '盗塁','牽制（セーフ）','ワイルドピッチ','パスボール','ボーク']);
 
 function applyResult(result, rbi){
   // ── カウント系（B/S/O を正確に更新し、打者はそのまま） ──
