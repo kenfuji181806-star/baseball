@@ -2704,6 +2704,26 @@ function setSubT(t){
   subType=t;
   document.querySelectorAll('.stab').forEach(el=>el.classList.toggle('active',el.dataset.t===t));
   document.getElementById('sub-arm-w').style.display=t==='pitcher'?'':'none';
+
+  const h=G.half;
+  const lu=G.lineup[h];
+  const bi=G.batterIdx[h];
+  const orderSel=document.getElementById('sub-order');
+  const orderLbl=orderSel.previousElementSibling; // label要素
+
+  if(t==='pitcher'){
+    // 投手交代: 相手チームの投手（表=後攻投手、裏=先攻投手）を表示
+    const pk = h==='top'?'bot':'top';
+    const pitcherName = G[pk+'Pitcher']||'（未設定）';
+    orderSel.innerHTML=`<option value="pitcher">${pitcherName}</option>`;
+    if(orderLbl) orderLbl.textContent='交代対象（現在の投手）';
+  } else {
+    // 代走・代打・野手交代: 打順リスト
+    orderSel.innerHTML=lu.map((p,i)=>
+      `<option value="${i}" ${i===bi?'selected':''}>${i+1}番 ${p.name||'（空）'}</option>`
+    ).join('');
+    if(orderLbl) orderLbl.textContent='交代対象（打順）';
+  }
 }
 function openSubModal(){
   const h=G.half,lu=G.lineup[h],bi=G.batterIdx[h];
@@ -2717,19 +2737,29 @@ function openSubModal(){
 }
 function confirmSub(){
   const h=G.half;
-  const oi=parseInt(document.getElementById('sub-order').value);
   const sv=document.getElementById('sub-new-sel').value;
   const iv=(document.getElementById('sub-new-inp').value||'').trim();
   const newName=iv||(sv==='（直接入力）'?'':sv);
   if(!newName){toast('選手名を入力してください');return;}
+
+  if(subType==='pitcher'){
+    // 投手交代: 相手チームの投手を更新（表=後攻投手、裏=先攻投手）
+    const pk=h==='top'?'bot':'top';
+    const oldPitcher=G[pk+'Pitcher']||'（未設定）';
+    changes.push({type:'pitcher',half:h,orderIdx:-1,
+      outPlayer:oldPitcher,inPlayer:newName,inning:G.inning,halfStr:G.half});
+    G[pk+'Pitcher']=newName;
+    G[pk+'PitcherArm']=document.getElementById('sub-arm').value;
+    saveG();closeModal('modal-sub');refreshSB();
+    toast(`✅ 投手交代: ${oldPitcher} → ${newName}`);
+    return;
+  }
+
+  const oi=parseInt(document.getElementById('sub-order').value);
   const old=G.lineup[h][oi];
   changes.push({type:subType,half:h,orderIdx:oi,
     outPlayer:old.name,inPlayer:newName,inning:G.inning,halfStr:G.half});
   G.lineup[h][oi]={name:newName,hand:document.getElementById('sub-hand').value,pos:old.pos||''};
-  if(subType==='pitcher'){
-    const pk=h==='top'?'bot':'top';
-    G[pk+'Pitcher']=newName;G[pk+'PitcherArm']=document.getElementById('sub-arm').value;
-  }
   saveG();closeModal('modal-sub');refreshSB();
   toast(`✅ 交代: ${old.name||'（空）'} → ${newName}`);
 }
