@@ -99,14 +99,14 @@ html,body{
 
 /* FOOTER */
 #ftr{
-  flex-shrink:0;
-  width:100%;
-  height:calc(var(--ftr-h) + env(safe-area-inset-bottom, 0px));
+  position:fixed;
+  bottom:0;left:0;right:0;
   background:#0a0e18;border-top:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;gap:8px;
-  padding:0 10px;
-  padding-bottom:env(safe-area-inset-bottom, 0px);
+  padding:8px 10px;
+  padding-bottom:max(8px, env(safe-area-inset-bottom, 8px));
   box-sizing:border-box;
+  z-index:200;
 }
 #btn-confirm{
   flex:1;max-width:320px;height:46px;
@@ -3369,6 +3369,12 @@ document.querySelectorAll('.overlay').forEach(el=>{
 let _tt;
 function toast(msg,ms=2400){
   const el=document.getElementById('toast');if(!el)return;
+  // フッターの実際の高さに合わせてbottomを設定
+  const ftr=document.getElementById('ftr');
+  if(ftr){
+    const fh=ftr.getBoundingClientRect().height;
+    el.style.bottom=(fh+10)+'px';
+  }
   el.textContent=msg;el.classList.add('show');
   clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),ms);
 }
@@ -3475,17 +3481,30 @@ function init(){
   // Supabase未接続時はURLにデータを埋め込んで自動復元に備える
   _embedPlayersInUrl();
 
-  // ── iPhone PWA: visualViewportで正確な表示領域高さを設定 ──
-  function _fixAppHeight(){
-    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    document.getElementById('app').style.height = Math.round(h) + 'px';
+  // ── iPhone PWA フッター余白修正 ──
+  // フッターをposition:fixedにした上で、
+  // #mainのpadding-bottomをフッターの実際の高さに合わせる
+  function _fixLayout(){
+    const ftr = document.getElementById('ftr');
+    const app = document.getElementById('app');
+    const main= document.getElementById('main');
+    if(!ftr||!app||!main) return;
+    // appの高さをvisualViewport（またはinnerHeight）に合わせる
+    const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    app.style.height = Math.round(vh) + 'px';
+    // mainのpadding-bottomをftrの実際の高さに合わせる
+    requestAnimationFrame(()=>{
+      const fh = ftr.getBoundingClientRect().height;
+      main.style.paddingBottom = Math.round(fh) + 'px';
+    });
   }
-  _fixAppHeight();
+  _fixLayout();
   if(window.visualViewport){
-    window.visualViewport.addEventListener('resize', _fixAppHeight);
+    window.visualViewport.addEventListener('resize', _fixLayout);
+    window.visualViewport.addEventListener('scroll', _fixLayout);
   }
-  window.addEventListener('resize', _fixAppHeight);
-  window.addEventListener('orientationchange', ()=>setTimeout(_fixAppHeight, 300));
+  window.addEventListener('resize', _fixLayout);
+  window.addEventListener('orientationchange', ()=>setTimeout(_fixLayout, 400));
 
   refreshSB();
 }
