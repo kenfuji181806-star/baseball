@@ -518,6 +518,35 @@ tr:nth-child(even) td{background:#0e1220;}
       </div>
     </div>
     <!-- ===== /結果クイックボタン ===== -->
+
+    <!-- ===== 走塁イベント（同時記録） ===== -->
+    <div id="baserun-panel" style="margin-top:4px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  border-top:1px solid var(--border2);padding-top:6px;margin-top:2px;">
+        <span class="res-group-lbl" style="margin:0;">🏃 走塁イベント（同時記録）</span>
+        <button id="baserun-toggle-btn" onclick="toggleBaserunPanel()"
+          style="background:var(--bg4);color:var(--muted);border:1px solid var(--border);
+                 border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:inherit;">
+          ＋ 追加
+        </button>
+      </div>
+      <!-- 走塁イベント入力エリア（初期非表示） -->
+      <div id="baserun-body" style="display:none;margin-top:6px;
+           background:var(--bg4);border-radius:8px;padding:8px;border:1px solid var(--border);">
+        <div id="baserun-events"></div>
+        <button onclick="addBaserunEvent()"
+          style="width:100%;margin-top:6px;padding:7px;border-radius:6px;
+                 background:var(--bg3);color:var(--muted);border:1px dashed var(--border);
+                 font-size:11px;cursor:pointer;font-family:inherit;">
+          ＋ 走塁イベントを追加
+        </button>
+      </div>
+      <!-- 登録済みイベントのサマリー表示 -->
+      <div id="baserun-summary" style="display:none;margin-top:4px;font-size:11px;
+           color:var(--obright);padding:4px 6px;background:var(--bg4);border-radius:5px;
+           border-left:3px solid var(--obright);"></div>
+    </div>
+    <!-- ===== /走塁イベント ===== -->
   </div>
 </div>
 
@@ -1937,6 +1966,8 @@ function doCommit(result, rbi, hitq, hitX, hitY){
       runners: G.runners.slice(),
       score:   {top: G.score.top, bot: G.score.bot},
       runnerMoveReason: fromRunnerMove || '',
+      // 走塁イベント（同時記録）
+      baserunEvents: getBaserunEvents(),
       // Undo 用: 確定前の打者インデックスを保存
       batterIdxTop: G.batterIdx.top,
       batterIdxBot: G.batterIdx.bot,
@@ -2067,7 +2098,7 @@ function resetInputs(){
   ['inp-speed','inp-rbi','inp-rbi-hd'].forEach(id=>{
     const e=document.getElementById(id);if(e)e.value=id==='inp-rbi'||id==='inp-rbi-hd'?'0':'';
   });
-  cDot={x:null,y:null};cCell=null;
+  resetBaserunPanel();
   pDot={x:null,y:null};pCell=null;
   fieldDot={x:null,y:null};
   P={catcherX:null,catcherY:null,pitchX:null,pitchY:null,hitX:null,hitY:null};
@@ -2493,8 +2524,107 @@ function getPosType(pos){
 }
 
 /* ============================================================
-   選手データ バックアップ（エクスポート／インポート）
+   走塁イベント（同時記録）
    ============================================================ */
+const BASERUN_FROM    = ['1塁走者','2塁走者','3塁走者'];
+const BASERUN_TO      = ['2塁','3塁','本塁'];
+const BASERUN_OUTCOME = ['成功','死（アウト）'];
+const BASERUN_REASON  = ['盗塁','ワイルドピッチ','パスボール','ボーク','牽制','挟殺','その他'];
+
+function toggleBaserunPanel(){
+  const body = document.getElementById('baserun-body');
+  const btn  = document.getElementById('baserun-toggle-btn');
+  if(!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  btn.textContent = open ? '＋ 追加' : '▲ 閉じる';
+  if(!open && document.getElementById('baserun-events').children.length === 0){
+    addBaserunEvent();
+  }
+}
+
+function addBaserunEvent(){
+  const wrap = document.getElementById('baserun-events');
+  if(!wrap) return;
+  const idx = wrap.children.length;
+  const row = document.createElement('div');
+  row.className = 'baserun-row';
+  row.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;align-items:center;';
+  row.innerHTML = `
+    <select data-idx="${idx}" data-key="from"
+      style="flex:1;min-width:80px;font-size:11px;padding:5px 3px;background:var(--bg3);
+             color:var(--text);border:1px solid var(--border);border-radius:5px;">
+      ${BASERUN_FROM.map(v=>`<option value="${v}">${v}</option>`).join('')}
+    </select>
+    <span style="color:var(--muted);font-size:11px;">→</span>
+    <select data-idx="${idx}" data-key="to"
+      style="flex:1;min-width:60px;font-size:11px;padding:5px 3px;background:var(--bg3);
+             color:var(--text);border:1px solid var(--border);border-radius:5px;">
+      ${BASERUN_TO.map(v=>`<option value="${v}">${v}</option>`).join('')}
+    </select>
+    <select data-idx="${idx}" data-key="outcome"
+      style="flex:1;min-width:70px;font-size:11px;padding:5px 3px;background:var(--bg3);
+             color:var(--text);border:1px solid var(--border);border-radius:5px;">
+      ${BASERUN_OUTCOME.map(v=>`<option value="${v}">${v}</option>`).join('')}
+    </select>
+    <select data-idx="${idx}" data-key="reason"
+      style="flex:1;min-width:80px;font-size:11px;padding:5px 3px;background:var(--bg3);
+             color:var(--text);border:1px solid var(--border);border-radius:5px;">
+      ${BASERUN_REASON.map(v=>`<option value="${v}">${v}</option>`).join('')}
+    </select>
+    <button onclick="this.closest('.baserun-row').remove();updateBaserunSummary();"
+      style="background:var(--rdark);color:#ffaaaa;border:none;border-radius:4px;
+             padding:5px 8px;font-size:11px;cursor:pointer;">✕</button>
+  `;
+  // 変更時にサマリー更新
+  row.querySelectorAll('select').forEach(s=>{
+    s.onchange = updateBaserunSummary;
+  });
+  wrap.appendChild(row);
+  updateBaserunSummary();
+}
+
+function getBaserunEvents(){
+  const wrap = document.getElementById('baserun-events');
+  if(!wrap) return [];
+  const events = [];
+  [...wrap.children].forEach(row=>{
+    const sels = row.querySelectorAll('select');
+    if(sels.length < 4) return;
+    events.push({
+      from:    sels[0].value,
+      to:      sels[1].value,
+      outcome: sels[2].value,
+      reason:  sels[3].value,
+    });
+  });
+  return events;
+}
+
+function updateBaserunSummary(){
+  const events = getBaserunEvents();
+  const summary = document.getElementById('baserun-summary');
+  if(!summary) return;
+  if(events.length === 0){
+    summary.style.display = 'none';
+    return;
+  }
+  summary.style.display = '';
+  summary.textContent = '🏃 ' + events.map(e=>
+    `${e.from}→${e.to} ${e.outcome}（${e.reason}）`
+  ).join(' / ');
+}
+
+function resetBaserunPanel(){
+  const wrap = document.getElementById('baserun-events');
+  if(wrap) wrap.innerHTML = '';
+  const body = document.getElementById('baserun-body');
+  if(body) body.style.display = 'none';
+  const btn = document.getElementById('baserun-toggle-btn');
+  if(btn) btn.textContent = '＋ 追加';
+  const summary = document.getElementById('baserun-summary');
+  if(summary) summary.style.display = 'none';
+}
 /* ============================================================
    GitHub Gist 設定UI
    ============================================================ */
@@ -2974,6 +3104,7 @@ function renderDataTable(){
     <td>${safe(r.result)}</td><td>${safe(r.strategy)}</td>
     <td>${r.rbi||0}</td><td>${safe(r.hitQuality)}</td>
     <td>${safe(r.runnerMoveReason)}</td>
+    <td>${r.baserunEvents&&r.baserunEvents.length ? r.baserunEvents.map(e=>`${e.from}→${e.to} ${e.outcome}(${e.reason})`).join(' / ') : ''}</td>
     <td>${r.balls||0}</td><td>${r.strikes||0}</td><td>${r.outs||0}</td>
     <td>${sc.top||0}</td><td>${sc.bot||0}</td>
   </tr>`;
@@ -2991,7 +3122,8 @@ function exportCSV(){
   const H=['日付','シーズン','種別','週','試合番号','主審',
     '先攻','後攻','回','表裏','打者','打席','守備位置','投手','投球腕',
     '球種','球速','構えX','構えY','コースX','コースY',
-    '打球X','打球Y','結果','作戦','打点','打球性質','走者移動理由',
+    '打球X','打球Y','結果','作戦','打点','打球性質','走者移動理由','走塁イベント',
+    '走塁イベント','走塁_起点','走塁_終点','走塁_結果','走塁_理由',
     'B','S','O','R1','R2','R3','先攻点','後攻点'];
   const f=v=>`"${String(v??'').replace(/"/g,'""')}"`;
   const rows=history.map(r=>{
@@ -3007,6 +3139,12 @@ function exportCSV(){
     sfn(r.pitchX),sfn(r.pitchY),
     sfn(r.hitX),sfn(r.hitY),
     r.result||'',r.strategy||'',r.rbi||0,r.hitQuality||'',r.runnerMoveReason||'',
+    // 走塁イベント（複数ある場合は最初の1件を代表として出力、全件はJSON列に）
+    r.baserunEvents&&r.baserunEvents.length ? JSON.stringify(r.baserunEvents) : '',
+    r.baserunEvents&&r.baserunEvents[0] ? r.baserunEvents[0].from||'' : '',
+    r.baserunEvents&&r.baserunEvents[0] ? r.baserunEvents[0].to||'' : '',
+    r.baserunEvents&&r.baserunEvents[0] ? r.baserunEvents[0].outcome||'' : '',
+    r.baserunEvents&&r.baserunEvents[0] ? r.baserunEvents[0].reason||'' : '',
     r.balls||0,r.strikes||0,r.outs||0,
     ru[0]?1:0,ru[1]?1:0,ru[2]?1:0,
     sc.top||0,sc.bot||0,
@@ -3060,7 +3198,7 @@ function exportXLSX(){
       '日付','シーズン','種別','週','試合番号','主審',
       '先攻','後攻','回','表裏','打者','打席','守備位置','投手','投球腕',
       '球種','球速','構えX','構えY','コースX','コースY',
-      '打球X','打球Y','結果','作戦','打点','打球性質','走者移動理由',
+      '打球X','打球Y','結果','作戦','打点','打球性質','走者移動理由','走塁イベント',
       'B','S','O','R1','R2','R3','先攻点','後攻点'
     ];
     const rows = _buildXlsxRows();
