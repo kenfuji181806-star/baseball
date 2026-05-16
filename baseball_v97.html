@@ -96,7 +96,7 @@ html,body{
   display:none;flex-direction:column;overflow:hidden;
 }
 .view.active{display:flex;}
-.vscroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overflow-x:hidden;padding:10px;padding-bottom:80px;}
+.vscroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overflow-x:hidden;padding:10px;}
 .vscroll::-webkit-scrollbar{width:3px;}
 .vscroll::-webkit-scrollbar-thumb{background:var(--border);}
 
@@ -493,6 +493,7 @@ tr:nth-child(even) td{background:#0e1220;}
           style="flex:1;font-size:12px;padding:6px 4px;background:var(--bg4);color:var(--text);
                  border:1px solid var(--border);border-radius:6px;">
           <option value="">▼ その他の結果</option>
+          <option value="ピッチクロック">ピッチクロック（ボール+1）</option>
           <option value="振り逃げ">振り逃げ</option>
           <option value="犠打">犠打</option>
           <option value="セーフティーバント">セーフティーバント</option>
@@ -1805,10 +1806,19 @@ function confirmHitDetail(){
   }
   pendingFinalResult=finalResult;
 
-  // ランナー配置が必要か（安打系）
+  // ランナー配置が必要か
   const hitBase={'単打':0,'二塁打':1,'三塁打':2,'本塁打':3};
-  if(hitBase[finalResult]!==undefined || NEEDS_RUNNER_PLACE.has(pendingResult)){
+  const isHitResult = hitBase[finalResult]!==undefined;
+  const isOutResult = pendingResult==='【打球アウト】→詳細入力'||pendingResult==='併殺打';
+
+  if(isHitResult || NEEDS_RUNNER_PLACE.has(pendingResult)){
     openRunnerPlace(finalResult, hitBase[finalResult], rbi, hitq);
+    return;
+  }
+
+  // 打球アウト・併殺打: ランナーがいる場合はランナー配置画面へ
+  if(isOutResult && G.runners.some(Boolean)){
+    openRunnerPlace(finalResult, null, rbi, hitq);
     return;
   }
 
@@ -1831,6 +1841,11 @@ function openRunnerPlace(result, batterBase=null, rbi=0, hitq=''){
     '四球':'打者は1塁へ（押し出しがある場合、手動で調整してください）',
     '故意四球':'打者は1塁へ',
     '死球':'打者は1塁へ',
+    'ゴロアウト':'タッチアップ・進塁があればランナー位置を設定してください',
+    'フライアウト':'タッチアップがあればランナー位置を設定してください',
+    'ライナーアウト':'ランナーの最終位置を設定してください',
+    '内野フライ':'ランナーの最終位置を設定してください',
+    '併殺打':'併殺打。残ったランナーの位置を設定してください',
   };
   _t('rp-context', result);
   _t('rp-hint', hints[result]||'最終的なランナー配置をタップで設定してください');
@@ -1972,6 +1987,11 @@ function doCommit(result, rbi, hitq, hitX, hitY){
     history.push(rec);
     fromRunnerMove = '';
 
+    // 走塁イベントをランナー状況に反映（applyResult前に処理）
+    if(rec.baserunEvents && rec.baserunEvents.length > 0){
+      applyBaserunEvents(rec.baserunEvents);
+    }
+
     applyResult(result, rbi);
     saveG();
     refreshSB();
@@ -1998,12 +2018,43 @@ const OUT_SET=new Set(['ゴロアウト','フライアウト','ライナーア�
   '犠打','犠飛','振り逃げ','振り逃げ（アウト）']);
 // カウントのみ変化（打者継続）
 const COUNT_ONLY=new Set(['ファウル','ボール','ストライク','見逃し','空振り',
-  '盗塁','牽制（セーフ）','ワイルドピッチ','パスボール','ボーク']);
+  '盗塁','牽制（セーフ）','ワイルドピッチ','パスボール','ボーク','ピッチクロック']);
+
+/* 走塁イベントをG.runnersに反映 */
+function applyBaserunEvents(events){
+  if(!events || !events.length) return;
+
+  // from/toの文字列をインデックスに変換
+  const fromIdx = {'1塁走者':0, '2塁走者':1, '3塁走者':2};
+  const toIdx   = {'2塁':1, '3塁':2, '本塁':3}; // 3=生還（ランナーから除外）
+
+  events.forEach(ev=>{
+    const fi = fromIdx[ev.from];
+    const ti = toIdx[ev.to];
+    if(fi === undefined || ti === undefined) return;
+
+    if(ev.outcome === '成功'){
+      // 起点を空にする
+      G.runners[fi] = false;
+      // 本塁以外は終点をセット、本塁は得点加算
+      if(ti < 3){
+        G.runners[ti] = true;
+      } else {
+        // 本塁生還 → 得点加算
+        G.score[G.half] += 1;
+      }
+    } else {
+      // 死（アウト）: 起点を空にしてアウト加算
+      G.runners[fi] = false;
+      G.outs = Math.min(3, G.outs + 1);
+    }
+  });
+}
 
 function applyResult(result, rbi){
   // ── カウント系（B/S/O を正確に更新し、打者はそのまま） ──
   if(COUNT_ONLY.has(result)){
-    if(result==='ボール'){
+    if(result==='ボール' || result==='ピッチクロック'){
       G.balls=Math.min(G.balls+1,4);
       if(G.balls>=4){
         // 四球扱いで次打者へ（カウントリセット）
@@ -2041,6 +2092,7 @@ function applyResult(result, rbi){
     if(G.outs>=3){ changeHalf(); return; }
   } else if(OUT_SET.has(result)){
     G.outs++;
+    if(rbi>0) G.score[G.half]+=rbi;
     advanceBatter(); // 3アウト時も必ず進めてからchangeHalf
     if(G.outs>=3){ changeHalf(); return; }
   } else {
@@ -2095,6 +2147,7 @@ function resetInputs(){
     const e=document.getElementById(id);if(e)e.value=id==='inp-rbi'||id==='inp-rbi-hd'?'0':'';
   });
   resetBaserunPanel();
+  cDot={x:null,y:null};cCell=null;
   pDot={x:null,y:null};pCell=null;
   fieldDot={x:null,y:null};
   P={catcherX:null,catcherY:null,pitchX:null,pitchY:null,hitX:null,hitY:null};
@@ -3620,10 +3673,19 @@ function init(){
     if(!ftr) return;
     requestAnimationFrame(()=>{
       const fh = Math.round(ftr.getBoundingClientRect().height);
+      const pad = fh + 16; // フッター高さ＋余裕16px
+
       // 全viewの下端をフッター高さ分上げてスクロール領域を確保
       document.querySelectorAll('.view').forEach(el=>{
         el.style.bottom = fh + 'px';
       });
+
+      // vscroll・pitch-formのpadding-bottomを設定（一番下のボタンが隠れないよう）
+      document.querySelectorAll('.vscroll').forEach(el=>{
+        el.style.paddingBottom = pad + 'px';
+      });
+      const pf = document.getElementById('pitch-form');
+      if(pf) pf.style.paddingBottom = pad + 'px';
     });
   }
   _fixLayout();
