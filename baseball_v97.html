@@ -104,7 +104,6 @@ html,body{
   background:#0a0e18;border-top:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;gap:8px;
   padding:8px 10px;
-  padding-bottom:max(34px, env(safe-area-inset-bottom, 34px));
   box-sizing:border-box;
   z-index:200;
 }
@@ -3486,13 +3485,8 @@ function init(){
   // #mainのpadding-bottomをフッターの実際の高さに合わせる
   function _fixLayout(){
     const ftr = document.getElementById('ftr');
-    const app = document.getElementById('app');
     const main= document.getElementById('main');
-    if(!ftr||!app||!main) return;
-    // appの高さをvisualViewport（またはinnerHeight）に合わせる
-    const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
-    app.style.height = Math.round(vh) + 'px';
-    // mainのpadding-bottomをftrの実際の高さに合わせる
+    if(!ftr||!main) return;
     requestAnimationFrame(()=>{
       const fh = ftr.getBoundingClientRect().height;
       main.style.paddingBottom = Math.round(fh) + 'px';
