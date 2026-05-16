@@ -107,6 +107,13 @@ html,body{
   box-sizing:border-box;
   z-index:200;
 }
+/* safe-area デバッグ用 */
+#sa-debug{
+  position:fixed;bottom:0;left:0;right:0;
+  height:env(safe-area-inset-bottom, 0px);
+  background:rgba(255,0,0,0.5);
+  z-index:199;pointer-events:none;
+}
 #btn-confirm{
   flex:1;max-width:320px;height:46px;
   background:linear-gradient(135deg,#1a7a38,#0e5025);
@@ -399,6 +406,7 @@ tr:nth-child(even) td{background:#0e1220;}
 </script>
 </head>
 <body>
+<div id="sa-debug"></div>
 <div id="app">
 
 <!-- ==================== HEADER ==================== -->
@@ -3490,14 +3498,20 @@ function init(){
     if(!ftr||!main) return;
     requestAnimationFrame(()=>{
       const fh = ftr.getBoundingClientRect().height;
-      const pad = Math.round(fh) + 10; // フッター高さ＋余裕10px
+      const ftrBottom = ftr.getBoundingClientRect().bottom;
+      const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      const gap = Math.round(vh - ftrBottom);
+      const pad = Math.round(fh) + 10;
       main.style.paddingBottom = pad + 'px';
-      // pitch-formにもpadding-bottomを設定してその他が隠れないように
       if(pf) pf.style.paddingBottom = pad + 'px';
-      // vscroll要素にも同様に適用
-      document.querySelectorAll('.vscroll').forEach(el=>{
-        el.style.paddingBottom = pad + 'px';
-      });
+      document.querySelectorAll('.vscroll').forEach(el=>{ el.style.paddingBottom = pad + 'px'; });
+
+      // デバッグ: safe-area-inset-bottomの実測値を確認
+      const saDiv = document.getElementById('sa-debug');
+      if(saDiv){
+        const saH = saDiv.getBoundingClientRect().height;
+        console.log('vh:', vh, 'ftrH:', fh, 'ftrBottom:', ftrBottom, 'gap:', gap, 'safe-area-h:', saH);
+      }
     });
   }
   _fixLayout();
