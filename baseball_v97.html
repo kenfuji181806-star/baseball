@@ -32,7 +32,7 @@ html,body{
 }
 
 /* ===== LAYOUT ===== */
-#app{display:flex;flex-direction:column;height:100svh;overflow:hidden;}
+#app{display:flex;flex-direction:column;height:100%;overflow:hidden;}
 
 /* HEADER */
 #hdr{
@@ -3473,6 +3473,16 @@ function init(){
 
   // Supabase未接続時はURLにデータを埋め込んで自動復元に備える
   _embedPlayersInUrl();
+
+  // ── iPhone PWA用: window.innerHeightで正確な高さを設定 ──
+  function _setAppHeight(){
+    const h = window.innerHeight;
+    document.getElementById('app').style.height = h + 'px';
+  }
+  _setAppHeight();
+  window.addEventListener('resize', _setAppHeight);
+  // orientationchange後に再計算
+  window.addEventListener('orientationchange', ()=>{ setTimeout(_setAppHeight, 300); });
 
   refreshSB();
 }
