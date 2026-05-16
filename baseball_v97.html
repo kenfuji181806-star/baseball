@@ -93,7 +93,7 @@ html,body{
 /* VIEWS */
 .view{position:absolute;inset:0;display:none;flex-direction:column;overflow:hidden;}
 .view.active{display:flex;}
-.vscroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px;padding-bottom:80px;}
+.vscroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px;}
 .vscroll::-webkit-scrollbar{width:3px;}
 .vscroll::-webkit-scrollbar-thumb{background:var(--border);}
 
@@ -103,8 +103,8 @@ html,body{
   bottom:0;left:0;right:0;
   background:#0a0e18;border-top:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;gap:8px;
-  padding:6px 10px;
-  padding-bottom:env(safe-area-inset-bottom, 6px);
+  padding:8px 10px;
+  padding-bottom:max(22px, env(safe-area-inset-bottom, 22px));
   box-sizing:border-box;
   z-index:200;
 }
@@ -162,7 +162,7 @@ option{background:#151a2a;}
   cursor:crosshair;touch-action:none;display:block;
   width:100%;  /* コンテナ幅に追従 */
 }
-#pitch-form{flex:1;overflow-y:auto;padding:10px;padding-bottom:80px;display:flex;flex-direction:column;gap:8px;}
+#pitch-form{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;}
 #pitch-form::-webkit-scrollbar{width:3px;}
 #pitch-form::-webkit-scrollbar-thumb{background:var(--border);}
 
@@ -3487,10 +3487,18 @@ function init(){
   function _fixLayout(){
     const ftr = document.getElementById('ftr');
     const main= document.getElementById('main');
+    const pf  = document.getElementById('pitch-form');
     if(!ftr||!main) return;
     requestAnimationFrame(()=>{
       const fh = ftr.getBoundingClientRect().height;
-      main.style.paddingBottom = Math.round(fh) + 'px';
+      const pad = Math.round(fh) + 10; // フッター高さ＋余裕10px
+      main.style.paddingBottom = pad + 'px';
+      // pitch-formにもpadding-bottomを設定してその他が隠れないように
+      if(pf) pf.style.paddingBottom = pad + 'px';
+      // vscroll要素にも同様に適用
+      document.querySelectorAll('.vscroll').forEach(el=>{
+        el.style.paddingBottom = pad + 'px';
+      });
     });
   }
   _fixLayout();
