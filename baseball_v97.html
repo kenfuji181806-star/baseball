@@ -486,6 +486,8 @@ tr:nth-child(even) td{background:#0e1220;}
       <div class="res-btn-row">
         <button class="rbtn rbtn-hit"    onclick="setResult('【安打】→詳細入力')">安打▶</button>
         <button class="rbtn rbtn-out"    onclick="setResult('【打球アウト】→詳細入力')">打球OUT▶</button>
+        <button class="rbtn" style="background:#1a1a3a;color:#a0a0ff;border-color:#3a3a7a;"
+          onclick="openKensei()">牽制▶</button>
       </div>
       <div class="res-group-lbl">その他</div>
       <div class="res-btn-row" style="gap:4px;">
@@ -1026,6 +1028,39 @@ tr:nth-child(even) td{background:#0e1220;}
     <div class="row" style="gap:8px;">
       <button class="mbtn mbtn-g" style="flex:1;" onclick="applyManual()">✅ 適用</button>
       <button class="mbtn mbtn-gr" onclick="closeModal('modal-manual')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL: 牽制 ==================== -->
+<div id="modal-kensei" class="overlay">
+  <div class="modal">
+    <button class="mclose" onclick="closeModal('modal-kensei')">✕</button>
+    <div class="mtitle">🏃 牽制</div>
+    <div class="fld" style="margin-bottom:10px;">
+      <label>牽制先</label>
+      <div class="res-btn-row" style="gap:6px;">
+        <button id="ks-base-1" class="rbtn" style="background:var(--bg4);color:var(--text);border-color:var(--border);"
+          onclick="selectKenseiBase('1塁')">1塁</button>
+        <button id="ks-base-2" class="rbtn" style="background:var(--bg4);color:var(--text);border-color:var(--border);"
+          onclick="selectKenseiBase('2塁')">2塁</button>
+        <button id="ks-base-3" class="rbtn" style="background:var(--bg4);color:var(--text);border-color:var(--border);"
+          onclick="selectKenseiBase('3塁')">3塁</button>
+      </div>
+    </div>
+    <div class="fld" style="margin-bottom:12px;">
+      <label>結果</label>
+      <div class="res-btn-row" style="gap:6px;">
+        <button id="ks-out-safe" class="rbtn rbtn-hit"
+          onclick="selectKenseiResult('セーフ')">セーフ</button>
+        <button id="ks-out-out" class="rbtn rbtn-out"
+          onclick="selectKenseiResult('アウト')">アウト</button>
+      </div>
+    </div>
+    <button class="mbtn mbtn-g mbtn-full" style="padding:11px;font-size:14px;"
+      onclick="confirmKensei()">✅ 記録する</button>
+    <div style="margin-top:6px;text-align:right;">
+      <button class="mbtn mbtn-gr" onclick="closeModal('modal-kensei')">キャンセル</button>
     </div>
   </div>
 </div>
@@ -2020,7 +2055,92 @@ const OUT_SET=new Set(['ゴロアウト','フライアウト','ライナーア�
 const COUNT_ONLY=new Set(['ファウル','ボール','ストライク','見逃し','空振り',
   '盗塁','牽制（セーフ）','ワイルドピッチ','パスボール','ボーク','ピッチクロック']);
 
-/* 走塁イベントをG.runnersに反映 */
+/* ============================================================
+   牽制
+   ============================================================ */
+let _kensei = { base: '', result: '' };
+
+function openKensei(){
+  _kensei = { base: '', result: '' };
+  ['1塁','2塁','3塁'].forEach(b=>{
+    const el = document.getElementById(`ks-base-${b[0]}`);
+    if(el){ el.style.background='var(--bg4)'; el.style.color='var(--text)'; el.style.borderColor='var(--border)'; el.style.borderWidth='1px'; }
+  });
+  ['ks-out-safe','ks-out-out'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){ el.style.filter=''; el.style.borderWidth='1px'; }
+  });
+  openModal('modal-kensei');
+}
+
+function selectKenseiBase(base){
+  _kensei.base = base;
+  ['1塁','2塁','3塁'].forEach(b=>{
+    const el = document.getElementById(`ks-base-${b[0]}`);
+    if(!el) return;
+    const sel = b===base;
+    el.style.background  = sel ? '#1a1a3a' : 'var(--bg4)';
+    el.style.color       = sel ? '#a0a0ff' : 'var(--text)';
+    el.style.borderColor = sel ? '#6060cc' : 'var(--border)';
+    el.style.borderWidth = sel ? '2px' : '1px';
+  });
+}
+
+function selectKenseiResult(result){
+  _kensei.result = result;
+  const safeEl = document.getElementById('ks-out-safe');
+  const outEl  = document.getElementById('ks-out-out');
+  if(safeEl){ safeEl.style.filter=result==='セーフ'?'brightness(1.3)':''; safeEl.style.borderWidth=result==='セーフ'?'2px':'1px'; }
+  if(outEl) { outEl.style.filter =result==='アウト'?'brightness(1.3)':''; outEl.style.borderWidth =result==='アウト'?'2px':'1px'; }
+}
+
+function confirmKensei(){
+  if(!_kensei.base)  { toast('⚠ 牽制先を選んでください'); return; }
+  if(!_kensei.result){ toast('⚠ 結果を選んでください'); return; }
+
+  const baseIdx = {'1塁':0,'2塁':1,'3塁':2};
+  const bi = baseIdx[_kensei.base];
+  const isOut = _kensei.result === 'アウト';
+  const resultStr = `牽制${_kensei.result}（${_kensei.base}）`;
+
+  // ランナー状況を更新
+  if(isOut && G.runners[bi]){
+    G.runners[bi] = false;
+    G.outs = Math.min(3, G.outs + 1);
+  }
+
+  // 記録
+  const bat = G.lineup[G.half][G.batterIdx[G.half]] || {};
+  const pk  = G.half==='top'?'bot':'top';
+  const rec = {
+    date:G.date||'', season:G.season||'', gameType:G.gameType||'',
+    week:G.week||'', gameNo:G.gameNo||'', umpire:G.umpire||'',
+    topTeam:G.topTeam||'', botTeam:G.botTeam||'',
+    inning:G.inning, half:G.half,
+    batter:bat.name||'', batterHand:bat.hand||'右', batterPos:bat.pos||'',
+    pitcher:G[pk+'Pitcher']||'', pitcherArm:G[pk+'PitcherArm']||'右',
+    pitchType:'', speed:'', strategy:'',
+    catcherX:null, catcherY:null, pitchX:null, pitchY:null,
+    hitX:null, hitY:null,
+    result:resultStr, rbi:0, hitQuality:'',
+    outs:G.outs, balls:G.balls, strikes:G.strikes,
+    runners:G.runners.slice(),
+    score:{top:G.score.top, bot:G.score.bot},
+    runnerMoveReason:resultStr, baserunEvents:[],
+    batterIdxTop:G.batterIdx.top, batterIdxBot:G.batterIdx.bot,
+  };
+  history.push(rec);
+
+  if(G.outs>=3){ saveG(); refreshSB(); changeHalf(); }
+  else { saveG(); refreshSB(); }
+
+  closeModal('modal-kensei');
+  toast(`✅ ${resultStr}`);
+}
+
+/* ============================================================
+   走塁イベントをG.runnersに反映
+   ============================================================ */
 function applyBaserunEvents(events){
   if(!events || !events.length) return;
 
