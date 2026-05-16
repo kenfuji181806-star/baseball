@@ -99,6 +99,7 @@ html,body{
   display:flex;align-items:center;justify-content:center;gap:8px;
   padding:0 10px;
   padding-bottom:env(safe-area-inset-bottom, 0px);
+  box-sizing:border-box;
 }
 #btn-confirm{
   flex:1;max-width:320px;height:46px;
@@ -446,12 +447,12 @@ tr:nth-child(even) td{background:#0e1220;}
     <div class="row">
       <div class="fld" style="flex:2;"><label>球種</label><select id="sel-type"></select></div>
       <div class="fld" style="flex:1;"><label>球速(km/h)</label>
-        <input id="inp-speed" type="number" min="0" max="220" placeholder="145"></div>
+        <input id="inp-speed" type="number" min="0" max="220" placeholder="145" style="font-size:16px;"></div>
     </div>
     <div class="row">
       <div class="fld" style="flex:2;"><label>作戦</label><select id="sel-strat"></select></div>
       <div class="fld" style="flex:1;"><label>打点</label>
-        <input id="inp-rbi" type="number" min="0" max="9" value="0"></div>
+        <input id="inp-rbi" type="number" min="0" max="9" value="0" style="font-size:16px;"></div>
     </div>
 
     <!-- ===== 結果クイックボタン ===== -->
@@ -484,12 +485,10 @@ tr:nth-child(even) td{background:#0e1220;}
                  border:1px solid var(--border);border-radius:6px;">
           <option value="">▼ その他の結果</option>
           <option value="振り逃げ">振り逃げ</option>
-          <option value="犠飛">犠飛</option>
           <option value="犠打">犠打</option>
           <option value="セーフティーバント">セーフティーバント</option>
           <option value="失策">失策</option>
           <option value="野選">野選</option>
-          <option value="併殺打">併殺打</option>
           <option value="盗塁死">盗塁死</option>
           <option value="牽制アウト">牽制アウト</option>
           <option value="走塁死（挟殺等）">走塁死（挟殺等）</option>
@@ -527,8 +526,10 @@ tr:nth-child(even) td{background:#0e1220;}
   </div>
   <div id="hd-body">
     <div class="fld" id="fld-hit-kind">
-      <label id="lbl-hit-kind">安打種別</label>
-      <select id="sel-hit-kind"></select>
+      <label id="lbl-hit-kind">打球種別</label>
+      <!-- hidden: JS側の既存コードとの互換性維持 -->
+      <input type="hidden" id="sel-hit-kind" value="">
+      <div id="hit-kind-btns" class="res-btn-row" style="flex-wrap:wrap;gap:5px;"></div>
     </div>
     <div id="cv-field-wrap">
       <canvas id="cv-field" width="280" height="260"></canvas>
@@ -537,7 +538,8 @@ tr:nth-child(even) td{background:#0e1220;}
     <div class="row">
       <div class="fld" id="fld-hitq"><label>打球の性質</label><select id="sel-hitq"></select></div>
       <div class="fld" style="flex:1;"><label>打点 RBI</label>
-        <input id="inp-rbi-hd" type="number" min="0" max="9" value="0"></div>
+        <input id="inp-rbi-hd" type="number" min="0" max="9" value="0"
+          style="font-size:16px;"></div>
     </div>
   </div>
 </div>
@@ -1680,11 +1682,10 @@ function handleConfirm(){
   pendingResult=result;
 
   if(NEEDS_DETAIL.has(result)){
-    // 打球詳細へ
     _t('hd-res-name', result.replace('→詳細入力',''));
     fieldDot={x:null,y:null};P.hitX=null;P.hitY=null;
     _t('coord-field','打球位置：（未選択）');
-    document.getElementById('sel-hit-kind').selectedIndex=0;
+    document.getElementById('sel-hit-kind').value='';
     document.getElementById('sel-hitq').selectedIndex=0;
     document.getElementById('inp-rbi-hd').value=
       document.getElementById('inp-rbi').value||'0';
@@ -1692,23 +1693,25 @@ function handleConfirm(){
     const isHit = result==='【安打】→詳細入力';
     const isOut = result==='【打球アウト】→詳細入力' || result==='併殺打';
 
-    // sel-hit-kind: 安打系→HIT_KINDS、アウト系→OUT_KINDS、その他→非表示
-    const kindSel = document.getElementById('sel-hit-kind');
     const kindFld = document.getElementById('fld-hit-kind');
     const kindLbl = document.getElementById('lbl-hit-kind');
+    const kindBtns= document.getElementById('hit-kind-btns');
+
     if(isHit){
       kindFld.style.display='';
       kindLbl.textContent='安打種別';
-      kindSel.innerHTML=HIT_KINDS.map(v=>`<option value="${v}">${v||'—'}</option>`).join('');
+      _buildKindBtns(HIT_KINDS.filter(Boolean), 'rbtn-hit');
     } else if(isOut){
       kindFld.style.display='';
-      kindLbl.textContent= result==='併殺打' ? '打球種別（併殺打）' : 'アウトの種類';
-      kindSel.innerHTML=OUT_KINDS.map(v=>`<option value="${v}">${v||'—'}</option>`).join('');
+      kindLbl.textContent = result==='併殺打' ? '打球種別（併殺打）' : 'アウトの種類';
+      // 打球アウトに「併殺打」を含めたボタン一覧
+      const outBtns = ['ゴロアウト','フライアウト','ライナーアウト','内野フライ','併殺打'];
+      _buildKindBtns(outBtns, 'rbtn-out');
     } else {
       kindFld.style.display='none';
     }
 
-    // sel-hitq（打球の性質）: 安打・その他のときのみ表示、打球アウト系は非表示
+    // 打球の性質: 安打・その他のときのみ表示
     document.getElementById('fld-hitq').style.display = isOut ? 'none' : '';
 
     showView('hitdetail');
@@ -1725,6 +1728,33 @@ function handleConfirm(){
   doCommit(result,
     parseInt(document.getElementById('inp-rbi').value)||0,
     '','','');
+}
+
+/* 打球種別ボタングループ生成 */
+function _buildKindBtns(kinds, colorClass){
+  const wrap = document.getElementById('hit-kind-btns');
+  if(!wrap) return;
+  wrap.innerHTML='';
+  document.getElementById('sel-hit-kind').value='';
+  kinds.forEach(k=>{
+    const btn = document.createElement('button');
+    btn.className = `rbtn ${colorClass}`;
+    btn.style.cssText = 'flex:1;min-width:70px;padding:8px 4px;font-size:12px;';
+    btn.textContent = k;
+    btn.onclick = ()=>{ selectKindBtn(k, wrap); };
+    wrap.appendChild(btn);
+  });
+}
+
+function selectKindBtn(val, wrap){
+  document.getElementById('sel-hit-kind').value = val;
+  if(!wrap) wrap = document.getElementById('hit-kind-btns');
+  [...wrap.children].forEach(b=>{
+    const sel = b.textContent===val;
+    b.style.filter    = sel ? 'brightness(1.3)' : '';
+    b.style.borderWidth = sel ? '2px' : '1px';
+    b.style.fontWeight  = sel ? '800' : '700';
+  });
 }
 
 function confirmHitDetail(){
@@ -2027,7 +2057,7 @@ function resetInputs(){
   if(sub) sub.selectedIndex=0;
   const bar=document.getElementById('result-selected-bar');
   if(bar) bar.style.display='none';
-  ['sel-type','sel-strat','sel-hitq','sel-hit-kind'].forEach(id=>{
+  ['sel-type','sel-strat','sel-hitq'].forEach(id=>{
     const s=document.getElementById(id);if(s)s.selectedIndex=0;
   });
   ['inp-speed','inp-rbi','inp-rbi-hd'].forEach(id=>{
@@ -3362,7 +3392,6 @@ function init(){
   pop('sel-strat',STRATEGIES);
   // sel-result はクイックボタン＋その他セレクト方式のため初期化不要
   pop('sel-hitq',HIT_QUALITIES);
-  pop('sel-hit-kind',HIT_KINDS);
 
   // 選手データ初期化（古いキーからの移行を含む）
   let pl = LP();
