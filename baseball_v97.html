@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>野球詳細データ記録システム v9.1</title>
 <style>
 /* ===== VARIABLES ===== */
@@ -20,7 +20,7 @@
   --cyan:#0a6a7a;--clight:#30d4e8;
   --text:#dce8f4;--muted:#6a7a9a;--dim:#3a4a5a;
   --inp:#10141e;
-  --hdr-h:calc(44px + env(safe-area-inset-top, 0px));--ftr-h:60px;
+  --hdr-h:44px;--ftr-h:60px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{
@@ -46,8 +46,6 @@ html,body{
   border-bottom:1px solid var(--border);
   display:flex;align-items:flex-end;gap:4px;
   padding:0 8px 6px;
-  padding-top:env(safe-area-inset-top, 0px);
-  padding-left:max(8px, env(safe-area-inset-left, 8px));
   overflow-x:auto;overflow-y:hidden;
 }
 #hdr::-webkit-scrollbar{display:none;}
@@ -103,16 +101,9 @@ html,body{
   bottom:0;left:0;right:0;
   background:#0a0e18;border-top:1px solid var(--border);
   display:flex;align-items:center;justify-content:center;gap:8px;
-  padding:8px 10px 8px;
+  padding:8px 10px;
   box-sizing:border-box;
   z-index:200;
-}
-/* safe-area デバッグ用 */
-#sa-debug{
-  position:fixed;bottom:0;left:0;right:0;
-  height:env(safe-area-inset-bottom, 0px);
-  background:rgba(255,0,0,0.5);
-  z-index:199;pointer-events:none;
 }
 #btn-confirm{
   flex:1;max-width:320px;height:46px;
@@ -406,7 +397,6 @@ tr:nth-child(even) td{background:#0e1220;}
 </script>
 </head>
 <body>
-<div id="sa-debug"></div>
 <div id="app">
 
 <!-- ==================== HEADER ==================== -->
