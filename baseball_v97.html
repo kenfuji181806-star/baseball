@@ -89,7 +89,12 @@ html,body{
 #main{flex:1;min-height:0;overflow:hidden;position:relative;}
 
 /* VIEWS */
-.view{position:absolute;inset:0;display:none;flex-direction:column;overflow:hidden;}
+.view{
+  position:absolute;
+  top:0;left:0;right:0;
+  bottom:calc(var(--ftr-h) + 10px);
+  display:none;flex-direction:column;overflow:hidden;
+}
 .view.active{display:flex;}
 .vscroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overflow-x:hidden;padding:10px;}
 .vscroll::-webkit-scrollbar{width:3px;}
@@ -3621,25 +3626,13 @@ function init(){
   // #mainのpadding-bottomをフッターの実際の高さに合わせる
   function _fixLayout(){
     const ftr = document.getElementById('ftr');
-    const main= document.getElementById('main');
-    const pf  = document.getElementById('pitch-form');
-    if(!ftr||!main) return;
+    if(!ftr) return;
     requestAnimationFrame(()=>{
-      const fh = ftr.getBoundingClientRect().height;
-      const ftrBottom = ftr.getBoundingClientRect().bottom;
-      const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-      const gap = Math.round(vh - ftrBottom);
-      const pad = Math.round(fh) + 10;
-      main.style.paddingBottom = pad + 'px';
-      if(pf) pf.style.paddingBottom = pad + 'px';
-      document.querySelectorAll('.vscroll').forEach(el=>{ el.style.paddingBottom = pad + 'px'; });
-
-      // デバッグ: safe-area-inset-bottomの実測値を確認
-      const saDiv = document.getElementById('sa-debug');
-      if(saDiv){
-        const saH = saDiv.getBoundingClientRect().height;
-        console.log('vh:', vh, 'ftrH:', fh, 'ftrBottom:', ftrBottom, 'gap:', gap, 'safe-area-h:', saH);
-      }
+      const fh = Math.round(ftr.getBoundingClientRect().height);
+      // 全viewの下端をフッター高さ分上げてスクロール領域を確保
+      document.querySelectorAll('.view').forEach(el=>{
+        el.style.bottom = fh + 'px';
+      });
     });
   }
   _fixLayout();
