@@ -432,7 +432,7 @@ tr:nth-child(even) td{background:#0e1220;}
     <div class="rdot" id="rd3" onclick="toggleR(2)" title="3塁"></div>
   </div>
   <span class="sb-info">打:<b id="sb-bat">—</b><span id="sb-bh" class="fs10 txt-m"></span></span>
-  <span class="sb-info">投:<b id="sb-pit">—</b><span id="sb-pa" class="fs10 txt-m"></span></span>
+  <span class="sb-info">投:<b id="sb-pit">—</b><span id="sb-pa" class="fs10 txt-m"></span><span id="sb-pc" class="fs10" style="color:var(--obright);margin-left:3px;"></span></span>
 </div>
 
 <!-- ==================== MAIN ==================== -->
@@ -1514,8 +1514,14 @@ function refreshSB(){
   _t('sb-bso', `B${G.balls} S${G.strikes} O${G.outs}`);
   _t('sb-bat', bat.name||'—');
   _t('sb-bh',  bat.hand?` [${bat.hand}]`:'');
-  _t('sb-pit', G[pk+'Pitcher']||'—');
+  const pitName = G[pk+'Pitcher']||'—';
+  _t('sb-pit', pitName);
   _t('sb-pa',  G[pk+'PitcherArm']?` [${G[pk+'PitcherArm']}]`:'');
+  // 現在の投手の球数を計算
+  const pitchCount = pitName && pitName!=='—'
+    ? history.filter(r => r.pitcher === pitName).length
+    : 0;
+  _t('sb-pc', pitchCount > 0 ? `${pitchCount}球` : '');
   [0,1,2].forEach(i=>{
     document.getElementById(`rd${i+1}`)?.classList.toggle('on',!!G.runners[i]);
   });
