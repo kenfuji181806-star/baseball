@@ -2029,8 +2029,17 @@ function doCommit(result, rbi, hitq, hitX, hitY){
     fromRunnerMove = '';
 
     // 走塁イベントをランナー状況に反映（applyResult前に処理）
+    // trueが返った場合は3アウトでチェンジ済み→applyResultをスキップ
     if(rec.baserunEvents && rec.baserunEvents.length > 0){
-      applyBaserunEvents(rec.baserunEvents);
+      const changed = applyBaserunEvents(rec.baserunEvents);
+      if(changed){
+        saveG(); refreshSB();
+        toast('✅ ' + result);
+        resetInputs();
+        showView('pitch');
+        _t('btn-confirm','☑ 投球を確定');
+        return;
+      }
     }
 
     applyResult(result, rbi);
@@ -2148,11 +2157,10 @@ function confirmKensei(){
    走塁イベントをG.runnersに反映
    ============================================================ */
 function applyBaserunEvents(events){
-  if(!events || !events.length) return;
+  if(!events || !events.length) return false;
 
-  // from/toの文字列をインデックスに変換
   const fromIdx = {'1塁走者':0, '2塁走者':1, '3塁走者':2};
-  const toIdx   = {'2塁':1, '3塁':2, '本塁':3}; // 3=生還（ランナーから除外）
+  const toIdx   = {'2塁':1, '3塁':2, '本塁':3};
 
   events.forEach(ev=>{
     const fi = fromIdx[ev.from];
@@ -2160,21 +2168,25 @@ function applyBaserunEvents(events){
     if(fi === undefined || ti === undefined) return;
 
     if(ev.outcome === '成功'){
-      // 起点を空にする
       G.runners[fi] = false;
-      // 本塁以外は終点をセット、本塁は得点加算
       if(ti < 3){
         G.runners[ti] = true;
       } else {
-        // 本塁生還 → 得点加算
         G.score[G.half] += 1;
       }
     } else {
-      // 死（アウト）: 起点を空にしてアウト加算
+      // 死（アウト）
       G.runners[fi] = false;
       G.outs = Math.min(3, G.outs + 1);
     }
   });
+
+  // 3アウトになった場合はchangeHalfを実行してtrueを返す
+  if(G.outs >= 3){
+    changeHalf();
+    return true; // チェンジ済み
+  }
+  return false;
 }
 
 function applyResult(result, rbi){
