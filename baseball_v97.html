@@ -78,6 +78,9 @@ html,body{
 .sb-info{font-size:11px;color:var(--muted);flex-shrink:0;}
 .sb-info b{color:var(--text);}
 .run-wrap{display:flex;gap:4px;align-items:center;flex-shrink:0;}
+.rdot-wrap{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;}
+.rdot-name{font-size:8px;color:var(--obright);max-width:32px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;line-height:1;}
 .rdot{
   width:12px;height:12px;border-radius:50%;
   background:var(--bg4);border:1.5px solid var(--muted);
@@ -427,9 +430,18 @@ tr:nth-child(even) td{background:#0e1220;}
   <span class="sb-bso" id="sb-bso">B0 S0 O0</span>
   <div class="run-wrap">
     <span class="fs10 txt-m">走:</span>
-    <div class="rdot" id="rd1" onclick="toggleR(0)" title="1塁"></div>
-    <div class="rdot" id="rd2" onclick="toggleR(1)" title="2塁"></div>
-    <div class="rdot" id="rd3" onclick="toggleR(2)" title="3塁"></div>
+    <div class="rdot-wrap" id="rdw1" onclick="toggleR(0)" title="1塁">
+      <div class="rdot" id="rd1"></div>
+      <span class="rdot-name" id="rn1"></span>
+    </div>
+    <div class="rdot-wrap" id="rdw2" onclick="toggleR(1)" title="2塁">
+      <div class="rdot" id="rd2"></div>
+      <span class="rdot-name" id="rn2"></span>
+    </div>
+    <div class="rdot-wrap" id="rdw3" onclick="toggleR(2)" title="3塁">
+      <div class="rdot" id="rd3"></div>
+      <span class="rdot-name" id="rn3"></span>
+    </div>
   </div>
   <span class="sb-info">打:<b id="sb-bat">—</b><span id="sb-bh" class="fs10 txt-m"></span></span>
   <span class="sb-info">投:<b id="sb-pit">—</b><span id="sb-pa" class="fs10 txt-m"></span><span id="sb-pc" class="fs10" style="color:var(--obright);margin-left:3px;"></span></span>
@@ -1017,12 +1029,41 @@ tr:nth-child(even) td{background:#0e1220;}
           <span class="cval" id="m-sc-b">0</span>
           <button class="cbtn" onclick="adjMS('bot',1)">＋</button></div></div>
     </div>
+    <!-- 球数修正 -->
+    <div class="g2" style="margin-bottom:10px;">
+      <div class="fld" style="align-items:center;"><label>先発投手 球数</label>
+        <div class="ctr"><button class="cbtn" onclick="adjMPitch('top',-1)">−</button>
+          <span class="cval" id="m-pc-top">0</span>
+          <button class="cbtn" onclick="adjMPitch('top',1)">＋</button></div>
+        <div class="fs10 txt-m tc" id="m-pc-top-name"></div>
+      </div>
+      <div class="fld" style="align-items:center;"><label>後攻投手 球数</label>
+        <div class="ctr"><button class="cbtn" onclick="adjMPitch('bot',-1)">−</button>
+          <span class="cval" id="m-pc-bot">0</span>
+          <button class="cbtn" onclick="adjMPitch('bot',1)">＋</button></div>
+        <div class="fs10 txt-m tc" id="m-pc-bot-name"></div>
+      </div>
+    </div>
     <div style="margin-bottom:10px;">
       <label class="fs11 txt-m fw7" style="display:block;margin-bottom:5px;">ランナー</label>
-      <div class="row" style="gap:12px;">
+      <div class="row" style="gap:12px;margin-bottom:6px;">
         <label style="display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" id="mr1"> 1塁</label>
         <label style="display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" id="mr2"> 2塁</label>
         <label style="display:inline-flex;align-items:center;gap:5px;"><input type="checkbox" id="mr3"> 3塁</label>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <div class="row" style="gap:6px;align-items:center;">
+          <span class="fs11 txt-m" style="width:28px;">1塁:</span>
+          <input id="mrn1" type="text" placeholder="走者名" style="flex:1;font-size:11px;">
+        </div>
+        <div class="row" style="gap:6px;align-items:center;">
+          <span class="fs11 txt-m" style="width:28px;">2塁:</span>
+          <input id="mrn2" type="text" placeholder="走者名" style="flex:1;font-size:11px;">
+        </div>
+        <div class="row" style="gap:6px;align-items:center;">
+          <span class="fs11 txt-m" style="width:28px;">3塁:</span>
+          <input id="mrn3" type="text" placeholder="走者名" style="flex:1;font-size:11px;">
+        </div>
       </div>
     </div>
     <div class="row" style="gap:8px;">
@@ -1212,6 +1253,7 @@ const G = {
   inning:1, half:'top',
   outs:0, balls:0, strikes:0,
   runners:[false,false,false],
+  runnerNames:['','',''],  // 各塁の走者名
   score:{top:0,bot:0},
   batterIdx:{top:0,bot:0},
 };
@@ -1228,7 +1270,9 @@ let pendingResult='';   // 打球詳細・ランナー配置に渡す結果
 let pendingFinalResult=''; // 詳細確定後の最終結果文字列
 let fromRunnerMove='';  // 走者移動の種類
 let rpState=[false,false,false]; // ランナー配置作業用状態
+let rpStateNames=['','','']; // ランナー名作業用
 let rpBatterBase=null;  // 打者の進塁先 0=1塁,1=2塁,2=3塁,3=本塁
+let rpBatterName='';    // 打者名
 
 /* ============================================================
    ストレージ
@@ -1451,6 +1495,7 @@ const loadG = () => {
       }
       if (!d.score) d.score = {top:0, bot:0};
       if (!Array.isArray(d.runners)) d.runners = [false,false,false];
+      if (!Array.isArray(d.runnerNames)) d.runnerNames = ['','',''];
       if (!d.batterIdx) d.batterIdx = {top:0, bot:0};
       Object.assign(G, d);
     }
@@ -1524,6 +1569,8 @@ function refreshSB(){
   _t('sb-pc', pitchCount > 0 ? `${pitchCount}球` : '');
   [0,1,2].forEach(i=>{
     document.getElementById(`rd${i+1}`)?.classList.toggle('on',!!G.runners[i]);
+    const nameEl = document.getElementById(`rn${i+1}`);
+    if(nameEl) nameEl.textContent = G.runners[i] ? (G.runnerNames[i]||'') : '';
   });
 }
 const _t=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
@@ -1869,9 +1916,12 @@ function confirmHitDetail(){
 /* ランナー配置画面を開く */
 function openRunnerPlace(result, batterBase=null, rbi=0, hitq=''){
   pendingFinalResult=result;
-  // 現在のランナー状態をコピーして作業用に
   rpState=[...G.runners];
+  rpStateNames=[...G.runnerNames]; // 現在のランナー名をコピー
   rpBatterBase=batterBase;
+  // 打者名を取得
+  const bat=G.lineup[G.half][G.batterIdx[G.half]]||{};
+  rpBatterName=bat.name||'';
 
   // ヒントテキスト
   const hints={
@@ -1946,8 +1996,12 @@ function confirmRunnerPlace(){
   // 打者を配置に追加（安打等で打者が出塁する場合）
   if(rpBatterBase!==null && rpBatterBase<3){
     rpState[rpBatterBase]=true;
+    rpStateNames[rpBatterBase]=rpBatterName; // 打者名をランナー名にセット
   }
+  // 空になった塁の名前をクリア
+  rpStateNames=rpStateNames.map((name,i)=>rpState[i]?name:'');
   G.runners=[...rpState];
+  G.runnerNames=[...rpStateNames];
 
   // 走者移動モーダル経由の場合：打者を進めずランナー・アウトのみ更新
   if(fromRunnerMove){
@@ -2162,21 +2216,27 @@ function applyBaserunEvents(events){
   const fromIdx = {'1塁走者':0, '2塁走者':1, '3塁走者':2};
   const toIdx   = {'2塁':1, '3塁':2, '本塁':3};
 
+  if(!G.runnerNames) G.runnerNames=['','',''];
+
   events.forEach(ev=>{
     const fi = fromIdx[ev.from];
     const ti = toIdx[ev.to];
     if(fi === undefined || ti === undefined) return;
 
+    const movingName = G.runnerNames[fi]||'';
+
     if(ev.outcome === '成功'){
       G.runners[fi] = false;
+      G.runnerNames[fi] = '';
       if(ti < 3){
         G.runners[ti] = true;
+        G.runnerNames[ti] = movingName;
       } else {
         G.score[G.half] += 1;
       }
     } else {
-      // 死（アウト）
       G.runners[fi] = false;
+      G.runnerNames[fi] = '';
       G.outs = Math.min(3, G.outs + 1);
     }
   });
@@ -2184,7 +2244,7 @@ function applyBaserunEvents(events){
   // 3アウトになった場合はchangeHalfを実行してtrueを返す
   if(G.outs >= 3){
     changeHalf();
-    return true; // チェンジ済み
+    return true;
   }
   return false;
 }
@@ -2242,7 +2302,9 @@ function applyResult(result, rbi){
 }
 
 function changeHalf(){
-  G.outs=0;G.balls=0;G.strikes=0;G.runners=[false,false,false];
+  G.outs=0;G.balls=0;G.strikes=0;
+  G.runners=[false,false,false];
+  G.runnerNames=['','',''];
   G.half=G.half==='top'?'bot':'top';
   if(G.half==='top') G.inning++;
 }
@@ -3081,16 +3143,34 @@ function setSubT(t){
   const lu=G.lineup[h];
   const bi=G.batterIdx[h];
   const orderSel=document.getElementById('sub-order');
-  const orderLbl=orderSel.previousElementSibling; // label要素
+  const orderLbl=orderSel.previousElementSibling;
 
   if(t==='pitcher'){
-    // 投手交代: 相手チームの投手（表=後攻投手、裏=先攻投手）を表示
+    // 投手交代: 相手チームの投手を表示
     const pk = h==='top'?'bot':'top';
     const pitcherName = G[pk+'Pitcher']||'（未設定）';
     orderSel.innerHTML=`<option value="pitcher">${pitcherName}</option>`;
     if(orderLbl) orderLbl.textContent='交代対象（現在の投手）';
+
+  } else if(t==='runner'){
+    // 代走: 現在いるランナーの塁を表示
+    const runnerBases = [];
+    const baseNames = ['1塁','2塁','3塁'];
+    G.runners.forEach((on, i)=>{
+      if(on){
+        // その塁にいる走者を打順から特定（簡易: 表示のみ）
+        runnerBases.push(`<option value="runner_${i}">${baseNames[i]}走者</option>`);
+      }
+    });
+    if(runnerBases.length === 0){
+      orderSel.innerHTML='<option value="">（ランナーなし）</option>';
+    } else {
+      orderSel.innerHTML=runnerBases.join('');
+    }
+    if(orderLbl) orderLbl.textContent='交代対象（塁）';
+
   } else {
-    // 代走・代打・野手交代: 打順リスト
+    // 代打・野手交代: 打順リスト
     orderSel.innerHTML=lu.map((p,i)=>
       `<option value="${i}" ${i===bi?'selected':''}>${i+1}番 ${p.name||'（空）'}</option>`
     ).join('');
@@ -3115,7 +3195,6 @@ function confirmSub(){
   if(!newName){toast('選手名を入力してください');return;}
 
   if(subType==='pitcher'){
-    // 投手交代: 相手チームの投手を更新（表=後攻投手、裏=先攻投手）
     const pk=h==='top'?'bot':'top';
     const oldPitcher=G[pk+'Pitcher']||'（未設定）';
     changes.push({type:'pitcher',half:h,orderIdx:-1,
@@ -3124,6 +3203,21 @@ function confirmSub(){
     G[pk+'PitcherArm']=document.getElementById('sub-arm').value;
     saveG();closeModal('modal-sub');refreshSB();
     toast(`✅ 投手交代: ${oldPitcher} → ${newName}`);
+    return;
+  }
+
+  if(subType==='runner'){
+    const orderVal=document.getElementById('sub-order').value;
+    if(!orderVal||orderVal===''){toast('ランナーがいません');return;}
+    const baseIdx=parseInt(orderVal.replace('runner_',''));
+    const baseNames=['1塁','2塁','3塁'];
+    if(!G.runnerNames) G.runnerNames=['','',''];
+    G.runnerNames[baseIdx]=newName; // 代走選手名をランナー名に更新
+    changes.push({type:'runner',half:h,orderIdx:baseIdx,
+      outPlayer:`${baseNames[baseIdx]}走者`,inPlayer:newName,
+      inning:G.inning,halfStr:G.half});
+    saveG();closeModal('modal-sub');refreshSB();
+    toast(`✅ 代走: ${baseNames[baseIdx]}に ${newName}`);
     return;
   }
 
@@ -3145,7 +3239,54 @@ function openManualModal(){
   document.getElementById('mr1').checked=G.runners[0];
   document.getElementById('mr2').checked=G.runners[1];
   document.getElementById('mr3').checked=G.runners[2];
+  // ランナー名
+  if(!G.runnerNames) G.runnerNames=['','',''];
+  [1,2,3].forEach(i=>{
+    const el=document.getElementById(`mrn${i}`);
+    if(el) el.value=G.runnerNames[i-1]||'';
+  });
+  // 球数表示
+  ['top','bot'].forEach(h=>{
+    const pitName = G[h+'Pitcher']||'';
+    const cnt = pitName ? history.filter(r=>r.pitcher===pitName).length : 0;
+    _t(`m-pc-${h}`, cnt);
+    _t(`m-pc-${h}-name`, pitName ? `（${pitName}）` : '（未設定）');
+  });
   openModal('modal-manual');
+}
+
+/* 球数を±1調整（ダミーレコードを追加/削除） */
+function adjMPitch(half, d){
+  const pitName = G[half+'Pitcher']||'';
+  if(!pitName){ toast('⚠ 投手が設定されていません'); return; }
+  const elId = `m-pc-${half}`;
+  const cur = parseInt(document.getElementById(elId).textContent)||0;
+  if(d > 0){
+    // ダミーレコードを追加
+    history.push({
+      pitcher: pitName, result:'（球数調整）', half: half==='top'?'bot':'top',
+      inning: G.inning, batter:'', pitchType:'', speed:'', strategy:'',
+      balls:0, strikes:0, outs:G.outs, rbi:0, hitQuality:'',
+      runners:G.runners.slice(), score:{top:G.score.top,bot:G.score.bot},
+      runnerMoveReason:'', baserunEvents:[],
+      date:G.date||'', season:G.season||'', gameType:G.gameType||'',
+      week:G.week||'', gameNo:G.gameNo||'', umpire:G.umpire||'',
+      topTeam:G.topTeam||'', botTeam:G.botTeam||'',
+      batterHand:'', batterPos:'', pitcherArm:'',
+      catcherX:null, catcherY:null, pitchX:null, pitchY:null,
+      hitX:null, hitY:null,
+      batterIdxTop:G.batterIdx.top, batterIdxBot:G.batterIdx.bot,
+    });
+    _t(elId, cur+1);
+  } else {
+    // 同じ投手の最後のレコードを削除（ダミー優先）
+    const idx = [...history].reverse().findIndex(r=>r.pitcher===pitName);
+    if(idx === -1 || cur <= 0){ toast('⚠ これ以上減らせません'); return; }
+    history.splice(history.length-1-idx, 1);
+    _t(elId, cur-1);
+  }
+  saveG();
+  refreshSB();
 }
 function adjM(k,d){
   const lim={outs:[0,3],balls:[0,4],strikes:[0,3]};
@@ -3163,6 +3304,11 @@ function applyManual(){
     document.getElementById('mr1').checked,
     document.getElementById('mr2').checked,
     document.getElementById('mr3').checked,
+  ];
+  G.runnerNames=[
+    (document.getElementById('mrn1').value||'').trim(),
+    (document.getElementById('mrn2').value||'').trim(),
+    (document.getElementById('mrn3').value||'').trim(),
   ];
   saveG();closeModal('modal-manual');refreshSB();toast('✅ 状態を修正しました');
 }
