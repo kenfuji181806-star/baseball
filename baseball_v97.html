@@ -1553,7 +1553,7 @@ function showView(id){
   if(id==='setup')       buildSetupView();
   if(id==='players')     initPlayerView();
   if(id==='data')        renderDataTable();
-  if(id==='runnerplace') syncRPDiamond();
+  if(id==='runnerplace') { syncRPDiamond(); setTimeout(_initDropTargets, 100); }
 }
 
 /* ============================================================
@@ -1580,24 +1580,9 @@ function refreshSB(){
     document.getElementById(`rd${i+1}`)?.classList.toggle('on',!!G.runners[i]);
     const nameEl = document.getElementById(`rn${i+1}`);
     if(nameEl) nameEl.textContent = G.runners[i] ? (G.runnerNames[i]||'') : '';
-    // スコアバードラッグ設定
-    const wrap = document.getElementById(`rdw${i+1}`);
-    if(wrap){
-      wrap.dataset.idx=i;
-      if(G.runners[i]){
-        // ドラッグ元として設定
-        _addDragToChip(wrap, i, 'sb');
-      }
-      // ドロップ先として設定（常時）
-      wrap.addEventListener('dragover', e=>{ e.preventDefault(); wrap.classList.add('drag-over-sb'); });
-      wrap.addEventListener('dragleave', ()=>wrap.classList.remove('drag-over-sb'));
-      wrap.addEventListener('drop', e=>{
-        e.preventDefault();
-        wrap.classList.remove('drag-over-sb');
-        if(_dragSrc.type==='sb') _doRunnerDrop('sb', _dragSrc.fromIdx, i);
-      });
-    }
   });
+  // スコアバードラッグ設定
+  _setupSBDrag();
 }
 const _t=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
 function toggleR(i){G.runners[i]=!G.runners[i];saveG();refreshSB();}
@@ -2010,7 +1995,6 @@ function syncRPDiamond(){
     const el=document.querySelector(`#diamond-rp .base-rp[data-b="${base}"]`);
     if(el) el.classList.toggle('on',!!rpState[i]);
   });
-  // チップ更新（走者名表示＋ドラッグ対応）
   const chips=document.getElementById('rp-chips');
   if(!chips) return;
   const labels=['1塁','2塁','3塁'];
@@ -2019,112 +2003,169 @@ function syncRPDiamond(){
     const chip=document.createElement('div');
     chip.className='runner-chip'+(on?' on':'');
     const name=rpStateNames[i]||'';
-    chip.textContent=`${labels[i]}${on?(name?': '+name:': ●'):''}`;
+    chip.innerHTML=`<span>${labels[i]}</span>${on?`<b style="margin-left:4px;">${name||'●'}</b>`:''}`;
     chip.dataset.base=i;
-    // クリックでトグル
     chip.onclick=()=>toggleRPBase(i);
-    // ドラッグ&ドロップ（タッチ対応）
-    if(on) _addDragToChip(chip, i, 'rp');
     chips.appendChild(chip);
   });
-  // ダイヤモンドの各塁をドロップ先に設定
-  [1,2,3].forEach(base=>{
+  // ドラッグ&ドロップ設定
+  _setupRPDrag();
+}
+
+/* ============================================================
+   ランナードラッグ&ドロップ（タッチ対応）
+   ============================================================ */
+let _drag={active:false,type:'',fromIdx:-1,clone:null};
+
+function _setupRPDrag(){
+  // ランナー配置画面のチップ
+  document.querySelectorAll('#rp-chips .runner-chip.on').forEach(chip=>{
+    const idx=parseInt(chip.dataset.base);
+    _bindDrag(chip, idx, 'rp');
+  });
+  // ランナー配置画面のダイヤモンド各塁をドロップ先に
+  [0,1,2].forEach(i=>{
+    const base=i+1;
     const el=document.querySelector(`#diamond-rp .base-rp[data-b="${base}"]`);
-    if(el) _addDropToBase(el, base-1, 'rp');
+    if(el) el.dataset.dropIdx=i;
   });
 }
 
-/* ドラッグ元チップの設定（タッチ対応） */
-let _dragSrc={type:'', fromIdx:-1};
-
-function _addDragToChip(el, fromIdx, type){
-  // マウスドラッグ
-  el.draggable=true;
-  el.addEventListener('dragstart', e=>{
-    _dragSrc={type, fromIdx};
-    setTimeout(()=>el.classList.add('dragging'),0);
-    e.dataTransfer.effectAllowed='move';
-  });
-  el.addEventListener('dragend', ()=>el.classList.remove('dragging'));
-
-  // タッチドラッグ
-  let clone=null, startX=0, startY=0;
-  el.addEventListener('touchstart', e=>{
-    _dragSrc={type, fromIdx};
-    const t=e.touches[0];
-    startX=t.clientX; startY=t.clientY;
-    clone=el.cloneNode(true);
-    clone.style.cssText=`position:fixed;z-index:9999;opacity:0.8;pointer-events:none;
-      left:${startX-40}px;top:${startY-20}px;`;
-    document.body.appendChild(clone);
-  },{passive:true});
-  el.addEventListener('touchmove', e=>{
-    if(!clone) return;
-    const t=e.touches[0];
-    clone.style.left=(t.clientX-40)+'px';
-    clone.style.top=(t.clientY-20)+'px';
-    // ドロップ先ハイライト
-    document.querySelectorAll('.base-rp,.rdot-wrap').forEach(el2=>
-      el2.classList.remove('drag-over','drag-over-sb'));
-    const under=document.elementFromPoint(t.clientX,t.clientY);
-    const base=under?.closest('.base-rp');
-    const rdot=under?.closest('.rdot-wrap');
-    if(base) base.classList.add('drag-over');
-    if(rdot) rdot.classList.add('drag-over-sb');
-  },{passive:true});
-  el.addEventListener('touchend', e=>{
-    if(clone){ clone.remove(); clone=null; }
-    document.querySelectorAll('.base-rp,.rdot-wrap').forEach(el2=>
-      el2.classList.remove('drag-over','drag-over-sb'));
-    const t=e.changedTouches[0];
-    const under=document.elementFromPoint(t.clientX,t.clientY);
-    const base=under?.closest('.base-rp');
-    const rdot=under?.closest('.rdot-wrap');
-    if(base){
-      const toIdx=parseInt(base.dataset.b)-1;
-      if(!isNaN(toIdx)) _doRunnerDrop(type, fromIdx, toIdx);
-    } else if(rdot){
-      const toIdx=parseInt(rdot.dataset.idx);
-      if(!isNaN(toIdx)) _doRunnerDrop(type, fromIdx, toIdx);
+function _setupSBDrag(){
+  // スコアバーのランナードット
+  [0,1,2].forEach(i=>{
+    const wrap=document.getElementById(`rdw${i+1}`);
+    if(!wrap) return;
+    // 既存のリスナーをリセット（cloneNodeで置き換え）
+    const newWrap=wrap.cloneNode(true);
+    wrap.parentNode.replaceChild(newWrap,wrap);
+    newWrap.id=`rdw${i+1}`;
+    newWrap.dataset.idx=i;
+    // クリック
+    newWrap.onclick=()=>toggleR(i);
+    if(G.runners[i]){
+      _bindDrag(newWrap, i, 'sb');
     }
   });
 }
 
-function _addDropToBase(el, toIdx, type){
-  el.addEventListener('dragover', e=>{ e.preventDefault(); el.classList.add('drag-over'); });
-  el.addEventListener('dragleave', ()=>el.classList.remove('drag-over'));
-  el.addEventListener('drop', e=>{
+function _bindDrag(el, fromIdx, type){
+  // タッチイベント
+  el.addEventListener('touchstart', e=>{
+    e.stopPropagation();
+    const t=e.touches[0];
+    _drag={active:true, type, fromIdx, clone:null};
+    // クローン作成
+    const clone=el.cloneNode(true);
+    clone.style.cssText=`position:fixed;z-index:9999;opacity:0.85;pointer-events:none;
+      padding:6px 12px;border-radius:12px;font-size:12px;font-weight:700;
+      background:var(--orange);color:#fff;border:2px solid var(--obright);
+      left:${t.clientX-50}px;top:${t.clientY-20}px;`;
+    document.body.appendChild(clone);
+    _drag.clone=clone;
+    el.style.opacity='0.3';
+  },{passive:false});
+
+  el.addEventListener('touchmove', e=>{
+    if(!_drag.active||!_drag.clone) return;
     e.preventDefault();
-    el.classList.remove('drag-over');
-    if(_dragSrc.type===type) _doRunnerDrop(type, _dragSrc.fromIdx, toIdx);
+    const t=e.touches[0];
+    _drag.clone.style.left=(t.clientX-50)+'px';
+    _drag.clone.style.top=(t.clientY-20)+'px';
+    // ドロップ先ハイライト
+    _clearDropHighlight();
+    const under=document.elementFromPoint(t.clientX,t.clientY);
+    const base=under?.closest('[data-drop-idx],[data-idx]');
+    if(base) base.classList.add('drag-over-sb');
+  },{passive:false});
+
+  el.addEventListener('touchend', e=>{
+    if(!_drag.active) return;
+    e.preventDefault();
+    if(_drag.clone){ _drag.clone.remove(); _drag.clone=null; }
+    el.style.opacity='';
+    _clearDropHighlight();
+    const t=e.changedTouches[0];
+    const under=document.elementFromPoint(t.clientX,t.clientY);
+    // ランナー配置画面のダイヤモンド塁
+    const base=under?.closest('.base-rp');
+    // スコアバーのrdot-wrap
+    const rdot=under?.closest('.rdot-wrap');
+    let toIdx=-1;
+    if(base) toIdx=parseInt(base.dataset.b)-1;
+    else if(rdot) toIdx=parseInt(rdot.dataset.idx);
+    if(toIdx>=0 && toIdx<=2) _doRunnerDrop(_drag.type, _drag.fromIdx, toIdx);
+    _drag={active:false,type:'',fromIdx:-1,clone:null};
+  },{passive:false});
+
+  // マウスドラッグ（PC用）
+  el.draggable=true;
+  el.addEventListener('dragstart', e=>{
+    _drag={active:true, type, fromIdx, clone:null};
+    e.dataTransfer.effectAllowed='move';
+    setTimeout(()=>el.classList.add('dragging'),0);
+  });
+  el.addEventListener('dragend', ()=>{
+    el.classList.remove('dragging');
+    el.style.opacity='';
+    _clearDropHighlight();
   });
 }
 
-/* ドロップ処理（ランナー配置画面） */
+function _clearDropHighlight(){
+  document.querySelectorAll('.drag-over,.drag-over-sb').forEach(el=>{
+    el.classList.remove('drag-over','drag-over-sb');
+  });
+}
+
+// ダイヤモンドとスコアバーのドロップ受け口（マウス用）
+function _initDropTargets(){
+  // ランナー配置画面
+  [0,1,2].forEach(i=>{
+    const base=i+1;
+    const el=document.querySelector(`#diamond-rp .base-rp[data-b="${base}"]`);
+    if(!el) return;
+    el.addEventListener('dragover', e=>{ e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', ()=>el.classList.remove('drag-over'));
+    el.addEventListener('drop', e=>{
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      if(_drag.type==='rp') _doRunnerDrop('rp',_drag.fromIdx,i);
+    });
+  });
+  // スコアバー
+  [0,1,2].forEach(i=>{
+    const wrap=document.getElementById(`rdw${i+1}`);
+    if(!wrap) return;
+    wrap.addEventListener('dragover', e=>{ e.preventDefault(); wrap.classList.add('drag-over-sb'); });
+    wrap.addEventListener('dragleave', ()=>wrap.classList.remove('drag-over-sb'));
+    wrap.addEventListener('drop', e=>{
+      e.preventDefault();
+      wrap.classList.remove('drag-over-sb');
+      if(_drag.type==='sb') _doRunnerDrop('sb',_drag.fromIdx,i);
+    });
+  });
+}
+
 function _doRunnerDrop(type, fromIdx, toIdx){
-  if(fromIdx===toIdx) return;
-  if(fromIdx<0||fromIdx>2||toIdx<0||toIdx>2) return;
+  if(fromIdx<0||fromIdx>2||toIdx<0||toIdx>2||fromIdx===toIdx) return;
 
   if(type==='rp'){
-    // ランナー配置画面
     if(!rpState[fromIdx]) return;
-    const movingName=rpStateNames[fromIdx]||'';
-    // 移動先にランナーがいる場合は入れ替え
-    const targetOn=rpState[toIdx];
-    const targetName=rpStateNames[toIdx]||'';
-    rpState[toIdx]=true; rpStateNames[toIdx]=movingName;
-    rpState[fromIdx]=targetOn; rpStateNames[fromIdx]=targetOn?targetName:'';
+    const mn=rpStateNames[fromIdx]||'';
+    const ton=rpState[toIdx]; const tn=rpStateNames[toIdx]||'';
+    rpState[toIdx]=true;   rpStateNames[toIdx]=mn;
+    rpState[fromIdx]=ton;  rpStateNames[fromIdx]=ton?tn:'';
     syncRPDiamond();
   } else if(type==='sb'){
-    // スコアバー（即時反映）
     if(!G.runners[fromIdx]) return;
-    const movingName=G.runnerNames[fromIdx]||'';
-    const targetOn=G.runners[toIdx];
-    const targetName=G.runnerNames[toIdx]||'';
-    G.runners[toIdx]=true; G.runnerNames[toIdx]=movingName;
-    G.runners[fromIdx]=targetOn; G.runnerNames[fromIdx]=targetOn?targetName:'';
+    const mn=G.runnerNames[fromIdx]||'';
+    const ton=G.runners[toIdx]; const tn=G.runnerNames[toIdx]||'';
+    G.runners[toIdx]=true;   G.runnerNames[toIdx]=mn;
+    G.runners[fromIdx]=ton;  G.runnerNames[fromIdx]=ton?tn:'';
     saveG(); refreshSB();
-    toast(`🏃 ${['1塁','2塁','3塁'][fromIdx]}→${['1塁','2塁','3塁'][toIdx]}`);
+    const bases=['1塁','2塁','3塁'];
+    toast(`🏃 ${mn||bases[fromIdx]} → ${bases[toIdx]}`);
   }
 }
 
@@ -4117,6 +4158,9 @@ function init(){
   }
   window.addEventListener('resize', _fixLayout);
   window.addEventListener('orientationchange', ()=>setTimeout(_fixLayout, 400));
+
+  // ドロップターゲット初期化（PC用マウスドラッグ）
+  setTimeout(_initDropTargets, 300);
 
   refreshSB();
 }
