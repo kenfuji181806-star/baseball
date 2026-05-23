@@ -919,6 +919,11 @@ tr:nth-child(even) td{background:#0e1220;}
         📥 Excelファイルをダウンロード保存
       </button>
       <div id="eg-save-status" style="font-size:11px;color:var(--muted);text-align:center;margin-top:4px;min-height:16px;"></div>
+      <button class="mbtn" style="width:100%;background:var(--bg4);color:var(--muted);
+              font-size:11px;padding:7px;margin-top:4px;"
+        onclick="markAsSaved()">
+        ✓ 保存済み（ボタンを有効にする）
+      </button>
     </div>
 
     <!-- Step 2: 次の試合 -->
@@ -1564,7 +1569,7 @@ function refreshSB(){
   _t('sb-pa',  G[pk+'PitcherArm']?` [${G[pk+'PitcherArm']}]`:'');
   // 現在の投手の球数を計算
   const pitchCount = pitName && pitName!=='—'
-    ? history.filter(r => r.pitcher === pitName).length
+    ? history.filter(r => r.pitcher === pitName && !String(r.result||'').startsWith('牽制')).length
     : 0;
   _t('sb-pc', pitchCount > 0 ? `${pitchCount}球` : '');
   [0,1,2].forEach(i=>{
@@ -1900,7 +1905,9 @@ function confirmHitDetail(){
   const isOutResult = pendingResult==='【打球アウト】→詳細入力'||pendingResult==='併殺打';
 
   if(isHitResult || NEEDS_RUNNER_PLACE.has(pendingResult)){
-    openRunnerPlace(finalResult, hitBase[finalResult], rbi, hitq);
+    // 本塁打はrbi手入力不要（自動計算）のでrbiを0で渡す
+    const rbiForCommit = finalResult==='本塁打' ? 0 : rbi;
+    openRunnerPlace(finalResult, hitBase[finalResult], rbiForCommit, hitq);
     return;
   }
 
@@ -2279,9 +2286,11 @@ function applyResult(result, rbi){
   G.balls=0;G.strikes=0;
 
   if(result==='本塁打'){
+    // 本塁打: 打者+全ランナーを自動計算（rbi手入力は無視）
     const cnt=1+G.runners.filter(Boolean).length;
     G.score[G.half]+=cnt;
     G.runners=[false,false,false];
+    G.runnerNames=['','',''];
     advanceBatter();
   } else if(result==='併殺打'){
     G.outs=Math.min(3,G.outs+2);
@@ -3248,7 +3257,7 @@ function openManualModal(){
   // 球数表示
   ['top','bot'].forEach(h=>{
     const pitName = G[h+'Pitcher']||'';
-    const cnt = pitName ? history.filter(r=>r.pitcher===pitName).length : 0;
+    const cnt = pitName ? history.filter(r=>r.pitcher===pitName && !String(r.result||'').startsWith('牽制')).length : 0;
     _t(`m-pc-${h}`, cnt);
     _t(`m-pc-${h}-name`, pitName ? `（${pitName}）` : '（未設定）');
   });
@@ -4014,14 +4023,26 @@ function confirmEndGame(){
 
 // Excel保存 + 保存完了マーク
 function exportXLSXandMark(){
-  exportXLSX();
-  // 保存完了扱いとして次の試合ボタンを有効化
+  try {
+    exportXLSX();
+  } catch(e) {
+    console.warn('Excel export error:', e);
+  }
+  // 成否に関わらず必ずボタンを有効化
   setTimeout(()=>{
     const btn = document.getElementById('eg-next-btn');
     if(btn){ btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
     const st = document.getElementById('eg-save-status');
     if(st){ st.textContent = '✅ 保存完了！次の試合ボタンが有効になりました'; st.style.color = 'var(--green)'; }
   }, 800);
+}
+
+// 手動で保存済みマーク（iPhoneでダウンロードが確認できない場合用）
+function markAsSaved(){
+  const btn = document.getElementById('eg-next-btn');
+  if(btn){ btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+  const st = document.getElementById('eg-save-status');
+  if(st){ st.textContent = '✅ 次の試合ボタンが有効になりました'; st.style.color = 'var(--green)'; }
 }
 
 // 次の試合開始（記録リセット）
@@ -4031,40 +4052,42 @@ function startNextGame(){
 
   if(!nextNo){ toast('次の試合番号を入力してください'); return; }
 
-  // 選手情報・ラインナップ・チームは引き継ぐ
-  const keepLineup = JSON.parse(JSON.stringify(G.lineup));
+  // チーム名・シーズン情報のみ引き継ぐ
   const keepTop    = G.topTeam;
   const keepBot    = G.botTeam;
-  const keepTP     = G.topPitcher;   const keepTPA = G.topPitcherArm;
-  const keepTC     = G.topCatcher;   const keepTCA = G.topCatcherArm;
-  const keepBP     = G.botPitcher;   const keepBPA = G.botPitcherArm;
-  const keepBC     = G.botCatcher;   const keepBCA = G.botCatcherArm;
   const keepSeason = G.season;
   const keepType   = G.gameType;
   const keepWeek   = G.week;
 
   // 試合状態をリセット
-  G.inning   = 1;
-  G.half     = 'top';
-  G.outs     = 0;
-  G.balls    = 0;
-  G.strikes  = 0;
-  G.runners  = [false, false, false];
-  G.score    = {top:0, bot:0};
+  G.inning    = 1;
+  G.half      = 'top';
+  G.outs      = 0;
+  G.balls     = 0;
+  G.strikes   = 0;
+  G.runners   = [false, false, false];
+  G.runnerNames = ['', '', ''];
+  G.score     = {top:0, bot:0};
   G.batterIdx = {top:0, bot:0};
-  G.gameNo   = nextNo;
-  G.date     = nextDate || new Date().toISOString().slice(0,10);
+  G.gameNo    = nextNo;
+  G.date      = nextDate || new Date().toISOString().slice(0,10);
 
-  // 引き継ぎ
-  G.lineup      = keepLineup;
-  G.topTeam     = keepTop;    G.botTeam     = keepBot;
-  G.topPitcher  = keepTP;     G.topPitcherArm = keepTPA;
-  G.topCatcher  = keepTC;     G.topCatcherArm = keepTCA;
-  G.botPitcher  = keepBP;     G.botPitcherArm = keepBPA;
-  G.botCatcher  = keepBC;     G.botCatcherArm = keepBCA;
-  G.season      = keepSeason;
-  G.gameType    = keepType;
-  G.week        = keepWeek;
+  // 打順・投手・捕手をリセット
+  G.lineup = {
+    top: Array.from({length:9}, ()=>({name:'', hand:'右', pos:''})),
+    bot: Array.from({length:9}, ()=>({name:'', hand:'右', pos:''})),
+  };
+  G.topPitcher = ''; G.topPitcherArm = '右';
+  G.topCatcher = ''; G.topCatcherArm = '右';
+  G.botPitcher = ''; G.botPitcherArm = '右';
+  G.botCatcher = ''; G.botCatcherArm = '右';
+
+  // チーム・シーズン引き継ぎ
+  G.topTeam   = keepTop;
+  G.botTeam   = keepBot;
+  G.season    = keepSeason;
+  G.gameType  = keepType;
+  G.week      = keepWeek;
 
   // 記録・変更履歴をクリア
   history = [];
@@ -4075,8 +4098,11 @@ function startNextGame(){
   saveG();
   refreshSB();
   closeModal('modal-endgame');
-  showView('pitch');
-  toast('⚾ 次の試合を開始しました: ' + nextNo, 3000);
+
+  // 試合設定画面へ移動してフォームを最新状態に更新
+  showView('setup');
+  buildSetupView();
+  toast('⚾ 次の試合設定を開始: ' + nextNo, 3000);
 }
 
 document.addEventListener('DOMContentLoaded', _syncFromIDB);
