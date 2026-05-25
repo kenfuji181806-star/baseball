@@ -160,6 +160,30 @@ header{position:sticky;top:0;z-index:50;background:rgba(10,10,15,0.85);backdrop-
 
 .toast-undo{margin-top:8px;background:rgba(124,106,247,0.2);border:1px solid var(--accent);color:var(--accent2);border-radius:6px;padding:4px 14px;font-size:12px;font-family:'Syne',sans-serif;font-weight:700;cursor:pointer;width:100%;transition:background 0.15s}
 .toast-undo:hover{background:rgba(124,106,247,0.35)}
+
+/* GITHUB SYNC */
+.sync-panel{background:linear-gradient(135deg,rgba(124,106,247,0.08),rgba(34,211,160,0.05));border:1px solid rgba(124,106,247,0.2);border-radius:var(--r);padding:1.25rem;margin-bottom:1.25rem}
+.sync-title{font-family:'Syne',sans-serif;font-weight:700;font-size:0.8rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:1rem;display:flex;align-items:center;gap:6px}
+.sync-status{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:12px;padding:8px 10px;border-radius:8px;background:var(--surface2)}
+.sync-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sync-dot.ok{background:var(--green);box-shadow:0 0 6px var(--green)}
+.sync-dot.err{background:var(--red)}
+.sync-dot.idle{background:var(--muted)}
+.sync-dot.loading{background:var(--gold);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.sync-msg{color:var(--text);flex:1}
+.sync-time{font-size:11px;color:var(--muted)}
+.sync-row{display:flex;gap:6px;margin-bottom:8px}
+.sync-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;outline:none}
+.sync-input:focus{border-color:var(--accent)}
+.sync-input::placeholder{color:var(--muted)}
+.btn-sync{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-family:'Syne',sans-serif;font-weight:700;cursor:pointer;transition:all 0.15s;white-space:nowrap}
+.btn-sync:hover{background:var(--accent2);transform:translateY(-1px)}
+.btn-sync:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+.btn-sync-sm{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;transition:all 0.15s}
+.btn-sync-sm:hover{border-color:var(--accent);color:var(--accent2)}
+.sync-btns{display:flex;gap:6px}
+.sync-warn{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -242,6 +266,40 @@ header{position:sticky;top:0;z-index:50;background:rgba(10,10,15,0.85);backdrop-
         <div class="achievement-list" id="ach-list"></div>
       </div>
 
+
+      <!-- GitHub Sync -->
+      <div class="sync-panel" id="sync-panel">
+        <div class="sync-title">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="color:var(--accent2)"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub 同期
+        </div>
+        <div class="sync-status" id="sync-status">
+          <div class="sync-dot idle" id="sync-dot"></div>
+          <div class="sync-msg" id="sync-msg">未接続 — トークンを設定してください</div>
+        </div>
+        <div id="sync-config">
+          <div class="sync-row">
+            <input class="sync-input" id="gh-token" type="password" placeholder="Personal Access Token (repo権限)" autocomplete="off">
+          </div>
+          <div class="sync-row">
+            <input class="sync-input" id="gh-owner" placeholder="ユーザー名 (例: kenfuji181806-star)" style="flex:1">
+            <input class="sync-input" id="gh-repo" placeholder="リポジトリ名 (例: baseball)" style="flex:1">
+          </div>
+          <div class="sync-row">
+            <input class="sync-input" id="gh-path" placeholder="ファイルパス (例: タスクマネージャー)" style="flex:1">
+            <button class="btn-sync" onclick="saveGhConfig()">接続</button>
+          </div>
+          <div class="sync-warn">⚠️ 個人利用のみ。PATはlocalStorageに保存されます。</div>
+        </div>
+        <div id="sync-actions" style="display:none">
+          <div class="sync-btns">
+            <button class="btn-sync" onclick="ghPush()" id="btn-push">⬆ GitHubに保存</button>
+            <button class="btn-sync-sm" onclick="ghPull()" id="btn-pull">⬇ 読み込む</button>
+            <button class="btn-sync-sm" onclick="clearGhConfig()" style="margin-left:auto">設定解除</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:8px" id="sync-last"></div>
+        </div>
+      </div>
       <!-- Reminders -->
       <div class="panel">
         <div class="panel-title">🔔 リマインダー</div>
@@ -629,6 +687,130 @@ function launchConfetti(){
   }
   draw();setTimeout(()=>{cancelAnimationFrame(frame);ctx.clearRect(0,0,canvas.width,canvas.height);},4000);
 }
+
+
+// ===== GITHUB SYNC =====
+const GH_CFG_KEY='hq_gh_config';
+
+function loadGhConfig(){
+  const s=localStorage.getItem(GH_CFG_KEY);
+  return s?JSON.parse(s):null;
+}
+function saveGhConfig(){
+  const token=document.getElementById('gh-token').value.trim();
+  const owner=document.getElementById('gh-owner').value.trim();
+  const repo=document.getElementById('gh-repo').value.trim();
+  const path=document.getElementById('gh-path').value.trim();
+  if(!token||!owner||!repo||!path){setSyncStatus('err','すべての項目を入力してください');return;}
+  const cfg={token,owner,repo,path};
+  localStorage.setItem(GH_CFG_KEY,JSON.stringify(cfg));
+  document.getElementById('sync-config').style.display='none';
+  document.getElementById('sync-actions').style.display='block';
+  setSyncStatus('ok',`${owner}/${repo} に接続済み`);
+}
+function clearGhConfig(){
+  localStorage.removeItem(GH_CFG_KEY);
+  document.getElementById('sync-config').style.display='block';
+  document.getElementById('sync-actions').style.display='none';
+  setSyncStatus('idle','未接続 — トークンを設定してください');
+}
+function setSyncStatus(type,msg){
+  const dot=document.getElementById('sync-dot');
+  dot.className='sync-dot '+type;
+  document.getElementById('sync-msg').textContent=msg;
+}
+function setLastSync(label){
+  const el=document.getElementById('sync-last');
+  if(el)el.textContent='最終同期: '+new Date().toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+' ('+label+')';
+}
+
+async function ghApiGet(cfg){
+  const url=`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURIComponent(cfg.path)}`;
+  const r=await fetch(url,{headers:{Authorization:`token ${cfg.token}`,'Accept':'application/vnd.github.v3+json'}});
+  if(!r.ok)throw new Error(`GET ${r.status}: ${r.statusText}`);
+  return r.json();
+}
+async function ghApiPut(cfg,content,sha){
+  const url=`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURIComponent(cfg.path)}`;
+  const body={message:'HabitQuest sync '+new Date().toISOString(),content:btoa(unescape(encodeURIComponent(content)))};
+  if(sha)body.sha=sha;
+  const r=await fetch(url,{method:'PUT',headers:{Authorization:`token ${cfg.token}`,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){const e=await r.json();throw new Error(e.message||r.statusText);}
+  return r.json();
+}
+
+async function ghPush(){
+  const cfg=loadGhConfig();
+  if(!cfg)return;
+  const btn=document.getElementById('btn-push');
+  btn.disabled=true;
+  setSyncStatus('loading','GitHubに保存中...');
+  try{
+    let sha=null;
+    try{const existing=await ghApiGet(cfg);sha=existing.sha;}catch(e){}
+    // Build sync payload: only habits and todos (no XP/streak to avoid overwrite conflicts)
+    const payload={habits:state.habits.map(h=>({id:h.id,name:h.name,emoji:h.emoji,xp:h.xp})),todos:state.todos.map(t=>({id:t.id,name:t.name,pri:t.pri,done:t.done})),syncedAt:new Date().toISOString(),source:'HabitQuest'};
+    // Embed JSON in an HTML comment inside the existing file format
+    const content=`<!-- HABITQUEST_SYNC:${JSON.stringify(payload)} -->`;
+    await ghApiPut(cfg,content,sha);
+    setSyncStatus('ok','✅ GitHubに保存しました');
+    setLastSync('Push');
+    showToast('☁ 同期完了','GitHubにデータを保存しました',false);
+  }catch(e){
+    setSyncStatus('err','エラー: '+e.message);
+    showToast('⚠ 同期失敗',e.message,false);
+  }finally{btn.disabled=false;}
+}
+
+async function ghPull(){
+  const cfg=loadGhConfig();
+  if(!cfg)return;
+  const btn=document.getElementById('btn-pull');
+  btn.disabled=true;
+  setSyncStatus('loading','GitHubから読み込み中...');
+  try{
+    const file=await ghApiGet(cfg);
+    const decoded=decodeURIComponent(escape(atob(file.content.replace(/\n/g,''))));
+    const match=decoded.match(/<!--\s*HABITQUEST_SYNC:(.*?)\s*-->/s);
+    if(!match)throw new Error('同期データが見つかりません。先にPushしてください。');
+    const payload=JSON.parse(match[1]);
+    // Merge: update habits list (preserve streaks/doneToday), merge todos
+    const existingHabits=new Map(state.habits.map(h=>[h.id,h]));
+    const mergedHabits=payload.habits.map(ph=>{
+      const ex=existingHabits.get(ph.id);
+      return ex?{...ex,name:ph.name,emoji:ph.emoji,xp:ph.xp}:{...ph,streak:0,lastDate:'',doneToday:false};
+    });
+    // Add local habits not in remote
+    payload.habits.forEach(ph=>{if(!existingHabits.has(ph.id))mergedHabits.push({...ph,streak:0,lastDate:'',doneToday:false});});
+    state.habits=mergedHabits;
+    const existingTodos=new Map(state.todos.map(t=>[t.id,t]));
+    state.todos=payload.todos.map(pt=>existingTodos.has(pt.id)?{...existingTodos.get(pt.id),...pt}:pt);
+    state.nextHabitId=Math.max(state.nextHabitId,...state.habits.map(h=>h.id+1));
+    state.nextTodoId=Math.max(state.nextTodoId,...state.todos.map(t=>t.id+1));
+    saveState();render();
+    setSyncStatus('ok','✅ GitHubから読み込みました');
+    setLastSync('Pull');
+    showToast('☁ 読み込み完了','GitHubのデータを取り込みました',false);
+  }catch(e){
+    setSyncStatus('err','エラー: '+e.message);
+    showToast('⚠ 読み込み失敗',e.message,false);
+  }finally{btn.disabled=false;}
+}
+
+function initSyncPanel(){
+  const cfg=loadGhConfig();
+  if(cfg){
+    document.getElementById('gh-token').value=cfg.token;
+    document.getElementById('gh-owner').value=cfg.owner;
+    document.getElementById('gh-repo').value=cfg.repo;
+    document.getElementById('gh-path').value=cfg.path;
+    document.getElementById('sync-config').style.display='none';
+    document.getElementById('sync-actions').style.display='block';
+    setSyncStatus('ok',`${cfg.owner}/${cfg.repo} に接続済み`);
+  }
+}
+initSyncPanel();
+// ===== END GITHUB SYNC =====
 
 // Close modal on bg click
 document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg)bg.classList.remove('open')}));
