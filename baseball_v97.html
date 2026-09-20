@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>野球詳細データ記録システム v9.2</title>
+<title>野球詳細データ記録システム v9.3</title>
 <style>
 /* ===== VARIABLES ===== */
 :root{
@@ -413,7 +413,7 @@ tr:nth-child(even) td{background:#0e1220;}
 
 <!-- ==================== HEADER ==================== -->
 <div id="hdr">
-  <span class="hdr-title">⚾v9.2</span>
+  <span class="hdr-title">⚾v9.3</span>
   <button class="hbtn hbtn-g on" id="hb-pitch"   onclick="showView('pitch')">📝記録</button>
   <button class="hbtn hbtn-b"    id="hb-setup"   onclick="showView('setup')">⚙試合設定</button>
   <button class="hbtn hbtn-p"    id="hb-players" onclick="showView('players')">👥選手</button>
@@ -1282,6 +1282,9 @@ let rpState=[false,false,false]; // ランナー配置作業用状態
 let rpStateNames=['','','']; // ランナー名作業用
 let rpBatterBase=null;  // 打者の進塁先 0=1塁,1=2塁,2=3塁,3=本塁
 let rpBatterName='';    // 打者名
+// ★ 投球時点（結果を反映する前）のランナー状況。記録(history)にはこちらを保存する
+let pitchStartRunners=null;
+let pitchStartRunnerNames=null;
 
 /* ============================================================
    ストレージ
@@ -1543,6 +1546,7 @@ function showView(id){
   _t('btn-confirm', lbl[id]??'☑ 投球を確定');
   // view init
   if(id==='pitch'){
+    pitchStartRunners=null;pitchStartRunnerNames=null;
     // レイアウト確定後に canvas を描画（display:none→flex になった直後は幅が 0）
     requestAnimationFrame(()=>{
       drawCourse('cv-c',cDot,cCell);
@@ -1928,6 +1932,9 @@ function confirmHitDetail(){
 
 /* ランナー配置画面を開く */
 function openRunnerPlace(result, batterBase=null, rbi=0, hitq=''){
+  // ★ この時点のG.runnersが「投球を行った際のランナー状況」
+  pitchStartRunners=[...G.runners];
+  pitchStartRunnerNames=[...G.runnerNames];
   pendingFinalResult=result;
   rpState=[...G.runners];
   rpStateNames=[...G.runnerNames]; // 現在のランナー名をコピー
@@ -2246,7 +2253,9 @@ function doCommit(result, rbi, hitq, hitX, hitY){
       outs:    G.outs,
       balls:   G.balls,
       strikes: G.strikes,
-      runners: G.runners.slice(),
+      // ★ 結果反映前（投球時点）のランナー状況を記録（安打・四死球でも結果後の状況にならない）
+      runners: (pitchStartRunners || G.runners).slice(),
+      runnerNames: (pitchStartRunnerNames || G.runnerNames).slice(),
       score:   {top: G.score.top, bot: G.score.bot},
       runnerMoveReason: fromRunnerMove || '',
       // 走塁イベント（同時記録）
@@ -2258,6 +2267,7 @@ function doCommit(result, rbi, hitq, hitX, hitY){
 
     history.push(rec);
     fromRunnerMove = '';
+    pitchStartRunners = null; pitchStartRunnerNames = null;
 
     // 走塁イベントをランナー状況に反映（applyResult前に処理）
     // trueが返った場合は3アウトでチェンジ済み→applyResultをスキップ
@@ -2349,6 +2359,10 @@ function confirmKensei(){
   const isOut = _kensei.result === 'アウト';
   const resultStr = `牽制${_kensei.result}（${_kensei.base}）`;
 
+  // ★ 牽制を行った時点のランナー状況を先に保存
+  const preRunners = G.runners.slice();
+  const preRunnerNames = (G.runnerNames || ['','','']).slice();
+
   // ランナー状況を更新
   if(isOut && G.runners[bi]){
     G.runners[bi] = false;
@@ -2370,7 +2384,7 @@ function confirmKensei(){
     hitX:null, hitY:null,
     result:resultStr, rbi:0, hitQuality:'',
     outs:G.outs, balls:G.balls, strikes:G.strikes,
-    runners:G.runners.slice(),
+    runners:preRunners, runnerNames:preRunnerNames,
     score:{top:G.score.top, bot:G.score.bot},
     runnerMoveReason:resultStr, baserunEvents:[],
     batterIdxTop:G.batterIdx.top, batterIdxBot:G.batterIdx.bot,
@@ -2500,6 +2514,7 @@ function doUndo(){
   G.inning=rec.inning;G.half=rec.half;
   G.outs=rec.outs;G.balls=rec.balls;G.strikes=rec.strikes;
   G.runners=[...rec.runners];G.score={...rec.score};
+  if(Array.isArray(rec.runnerNames)) G.runnerNames=[...rec.runnerNames];
   // 打者インデックスを確定前に戻す（打者名ズレ防止）
   if(rec.batterIdxTop!=null)G.batterIdx.top=rec.batterIdxTop;
   if(rec.batterIdxBot!=null)G.batterIdx.bot=rec.batterIdxBot;
@@ -2512,6 +2527,7 @@ function doUndo(){
 
 function resetInputs(){
   pendingResult='';pendingFinalResult='';
+  pitchStartRunners=null;pitchStartRunnerNames=null;
   // 結果クイックボタンのリセット
   document.getElementById('sel-result').value='';
   document.querySelectorAll('.rbtn').forEach(b=>b.classList.remove('selected'));
