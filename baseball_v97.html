@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>野球詳細データ記録システム v9.1</title>
+<title>野球詳細データ記録システム v9.2</title>
 <style>
 /* ===== VARIABLES ===== */
 :root{
@@ -413,7 +413,7 @@ tr:nth-child(even) td{background:#0e1220;}
 
 <!-- ==================== HEADER ==================== -->
 <div id="hdr">
-  <span class="hdr-title">⚾v9.1</span>
+  <span class="hdr-title">⚾v9.2</span>
   <button class="hbtn hbtn-g on" id="hb-pitch"   onclick="showView('pitch')">📝記録</button>
   <button class="hbtn hbtn-b"    id="hb-setup"   onclick="showView('setup')">⚙試合設定</button>
   <button class="hbtn hbtn-p"    id="hb-players" onclick="showView('players')">👥選手</button>
@@ -3595,9 +3595,10 @@ function innConfirmJump(){
 function renderDataTable(){
   const head=document.getElementById('dt-head');
   const body=document.getElementById('dt-body');if(!head||!body)return;
+  // ★修正: 「走塁イベント」列を追加（データ行は23列なので見出しも23列にそろえる）
   const cols=['#','回','打者','投手','球種','球速',
     '構えX','構えY','コースX','コースY','打球X','打球Y',
-    '結果','作戦','打点','打球性質','走者移動','B','S','O','先点','後点'];
+    '結果','作戦','打点','打球性質','走者移動','走塁イベント','B','S','O','先攻点','後攻点'];
   head.innerHTML=`<tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>`;
   _t('dt-cnt',`${history.length}件`);
   // 安全なフィールドアクセス（古いレコードでもクラッシュしない）
@@ -3631,18 +3632,19 @@ function renderDataTable(){
    ============================================================ */
 function exportCSV(){
   if(!history.length){toast('データがありません');return;}
+  // ★修正: 重複していた「走塁イベント」見出しを1つにして、データ列（41列）と見出しをそろえた
   const H=['日付','シーズン','種別','週','試合番号','主審',
     '先攻','後攻','回','表裏','打者','打席','守備位置','投手','投球腕',
     '球種','球速','構えX','構えY','コースX','コースY',
-    '打球X','打球Y','結果','作戦','打点','打球性質','走者移動理由','走塁イベント',
-    '走塁イベント','走塁_起点','走塁_終点','走塁_結果','走塁_理由',
+    '打球X','打球Y','結果','作戦','打点','打球性質','走者移動理由',
+    '走塁イベント(JSON)','走塁_起点','走塁_終点','走塁_結果','走塁_理由',
     'B','S','O','R1','R2','R3','先攻点','後攻点'];
   const f=v=>`"${String(v??'').replace(/"/g,'""')}"`;
   const rows=history.map(r=>{
     const sc=(r.score&&typeof r.score==='object')?r.score:{top:0,bot:0};
     const ru=Array.isArray(r.runners)?r.runners:[false,false,false];
     const sfn=v=>(v!=null&&typeof v==='number')?v.toFixed(1):(v!=null?String(v):'');
-    return [
+    const row=[
     r.date||'',r.season||'',r.gameType||'',r.week||'',r.gameNo||'',r.umpire||'',
     r.topTeam||'',r.botTeam||'',r.inning||0,r.half==='top'?'表':'裏',
     r.batter||'',r.batterHand||'',r.batterPos||'',r.pitcher||'',r.pitcherArm||'',
@@ -3660,7 +3662,9 @@ function exportCSV(){
     r.balls||0,r.strikes||0,r.outs||0,
     ru[0]?1:0,ru[1]?1:0,ru[2]?1:0,
     sc.top||0,sc.bot||0,
-    ].map(f).join(',');
+    ];
+    if(row.length!==H.length) console.error('CSV列数不一致', row.length, H.length);
+    return row.map(f).join(',');
   });
   const csv=[H.map(f).join(','),...rows].join('\r\n');
   const a=document.createElement('a');
@@ -3672,31 +3676,49 @@ function exportCSV(){
 /* ============================================================
    Excel (.xlsx) ダウンロード  ← SheetJS使用
    ============================================================ */
-/* ── Excel出力共通：行データ生成 ── */
-function _buildXlsxRows(){
-  // 安全なフィールドアクセス
-  const sf = (v, d='') => (v != null) ? v : d;
-  const sfn = v => (v != null && typeof v === 'number') ? parseFloat(v.toFixed(1)) : (v != null ? Number(v)||'' : '');
+/* ── 走塁イベントを読みやすい文字列に ── */
+function _baserunText(r){
+  const ev = Array.isArray(r.baserunEvents) ? r.baserunEvents : [];
+  return ev.map(e=>`${e.from}→${e.to} ${e.outcome}（${e.reason}）`).join(' / ');
+}
 
-  return history.map(r => {
-    const sc = (r.score && typeof r.score === 'object') ? r.score : {top:0,bot:0};
-    const ru = Array.isArray(r.runners) ? r.runners : [false,false,false];
-    return [
-      sf(r.date), sf(r.season), sf(r.gameType), sf(r.week), sf(r.gameNo), sf(r.umpire),
-      sf(r.topTeam), sf(r.botTeam),
-      sf(r.inning,0), r.half==='top'?'表':'裏',
-      sf(r.batter), sf(r.batterHand), sf(r.batterPos),
-      sf(r.pitcher), sf(r.pitcherArm),
-      sf(r.pitchType), sf(r.speed),
-      sfn(r.catcherX), sfn(r.catcherY),
-      sfn(r.pitchX),   sfn(r.pitchY),
-      sfn(r.hitX),     sfn(r.hitY),
-      sf(r.result), sf(r.strategy), r.rbi||0, sf(r.hitQuality), sf(r.runnerMoveReason),
-      r.balls||0, r.strikes||0, r.outs||0,
-      ru[0]?1:0, ru[1]?1:0, ru[2]?1:0,
-      sc.top||0, sc.bot||0,
-    ];
-  });
+/* ── Excel / OneDrive 共通ヘッダー（列の並びはここだけで管理） ── */
+const XLSX_HEADERS = [
+  '日付','シーズン','種別','週','試合番号','主審',
+  '先攻','後攻','回','表裏','打者','打席','守備位置','投手','投球腕',
+  '球種','球速','構えX','構えY','コースX','コースY',
+  '打球X','打球Y','結果','作戦','打点','打球性質','走者移動理由','走塁イベント',
+  'B','S','O','R1','R2','R3','先攻点','後攻点'
+];
+
+/* ── 1レコード → Excel/OneDrive用の行配列（XLSX_HEADERSと同じ順） ──
+   ★修正: 今まで「走塁イベント」の値が抜けていて、B以降が1列ずれていた */
+function _recToXlsxRow(r){
+  const sf  = (v, d='') => (v != null) ? v : d;
+  const sfn = v => (typeof v === 'number') ? parseFloat(v.toFixed(1)) : '';
+  const sc  = (r.score && typeof r.score === 'object') ? r.score : {top:0,bot:0};
+  const ru  = Array.isArray(r.runners) ? r.runners : [false,false,false];
+  const spd = (r.speed != null && r.speed !== '' && !isNaN(Number(r.speed))) ? Number(r.speed) : '';
+  const row = [
+    sf(r.date), sf(r.season), sf(r.gameType), sf(r.week), sf(r.gameNo), sf(r.umpire),
+    sf(r.topTeam), sf(r.botTeam),
+    sf(r.inning,0), r.half==='top'?'表':'裏',
+    sf(r.batter), sf(r.batterHand), sf(r.batterPos),
+    sf(r.pitcher), sf(r.pitcherArm),
+    sf(r.pitchType), spd,
+    sfn(r.catcherX), sfn(r.catcherY),
+    sfn(r.pitchX),   sfn(r.pitchY),
+    sfn(r.hitX),     sfn(r.hitY),
+    sf(r.result), sf(r.strategy), r.rbi||0, sf(r.hitQuality), sf(r.runnerMoveReason),
+    _baserunText(r),                       // 走塁イベント
+    r.balls||0, r.strikes||0, r.outs||0,
+    ru[0]?1:0, ru[1]?1:0, ru[2]?1:0,
+    sc.top||0, sc.bot||0,
+  ];
+  if(row.length !== XLSX_HEADERS.length){
+    console.error('Excel列数不一致', row.length, XLSX_HEADERS.length);
+  }
+  return row;
 }
 
 function exportXLSX(){
@@ -3706,22 +3728,16 @@ function exportXLSX(){
     return;
   }
   try {
-    const headers=[
-      '日付','シーズン','種別','週','試合番号','主審',
-      '先攻','後攻','回','表裏','打者','打席','守備位置','投手','投球腕',
-      '球種','球速','構えX','構えY','コースX','コースY',
-      '打球X','打球Y','結果','作戦','打点','打球性質','走者移動理由','走塁イベント',
-      'B','S','O','R1','R2','R3','先攻点','後攻点'
-    ];
-    const rows = _buildXlsxRows();
+    const headers = XLSX_HEADERS;
+    const rows = history.map(_recToXlsxRow);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
-    // 列幅
+    // 列幅（37列）
     ws['!cols'] = [
       {wch:10},{wch:8},{wch:6},{wch:4},{wch:8},{wch:8},
       {wch:8},{wch:8},{wch:3},{wch:3},{wch:8},{wch:4},{wch:8},{wch:8},{wch:4},
       {wch:10},{wch:5},{wch:6},{wch:6},{wch:6},{wch:6},{wch:6},{wch:6},
-      {wch:12},{wch:8},{wch:4},{wch:8},{wch:8},
+      {wch:12},{wch:8},{wch:4},{wch:8},{wch:8},{wch:36},
       {wch:3},{wch:3},{wch:3},{wch:3},{wch:3},{wch:3},{wch:5},{wch:5},
     ];
 
@@ -3886,24 +3902,9 @@ const OD = (()=>{
     return true;
   };
 
-  /* 投球レコード→行配列変換 */
-  const recToRow=r=>{
-    const sc=(r.score&&typeof r.score==='object')?r.score:{top:0,bot:0};
-    const ru=Array.isArray(r.runners)?r.runners:[false,false,false];
-    const sfn=v=>(v!=null&&typeof v==='number')?parseFloat(v.toFixed(1)):'';
-    return [
-      r.date||'',r.season||'',r.gameType||'',r.week||'',r.gameNo||'',r.umpire||'',
-      r.topTeam||'',r.botTeam||'',r.inning||0,r.half==='top'?'表':'裏',
-      r.batter||'',r.batterHand||'',r.batterPos||'',r.pitcher||'',r.pitcherArm||'',
-      r.pitchType||'',r.speed!==undefined?Number(r.speed)||'':'',
-      sfn(r.catcherX),sfn(r.catcherY),sfn(r.pitchX),sfn(r.pitchY),
-      sfn(r.hitX),sfn(r.hitY),
-      r.result||'',r.strategy||'',r.rbi||0,r.hitQuality||'',r.runnerMoveReason||'',
-      r.balls||0,r.strikes||0,r.outs||0,
-      ru[0]?1:0,ru[1]?1:0,ru[2]?1:0,
-      sc.top||0,sc.bot||0,
-    ];
-  };
+  /* 投球レコード→行配列変換
+     ★修正: Excel出力と同じ関数（_recToXlsxRow）を使い、走塁イベント列を含む37列で送信する */
+  const recToRow = r => _recToXlsxRow(r);
 
   /* 全データ送信 */
   const uploadAll=async(onProgress)=>{
