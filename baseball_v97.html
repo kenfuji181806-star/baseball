@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>野球詳細データ記録システム v9.5</title>
+<title>野球詳細データ記録システム v9.6</title>
 <style>
 /* ===== VARIABLES ===== */
 :root{
@@ -416,7 +416,7 @@ tr:nth-child(even) td{background:#0e1220;}
 
 <!-- ==================== HEADER ==================== -->
 <div id="hdr">
-  <span class="hdr-title">⚾v9.5</span>
+  <span class="hdr-title">⚾v9.6</span>
   <button class="hbtn hbtn-g on" id="hb-pitch"   onclick="showView('pitch')">📝記録</button>
   <button class="hbtn hbtn-b"    id="hb-setup"   onclick="showView('setup')">⚙試合設定</button>
   <button class="hbtn hbtn-p"    id="hb-players" onclick="showView('players')">👥選手</button>
@@ -1228,6 +1228,25 @@ const NEEDS_DETAIL = new Set([
   '併殺打',
 ]);
 
+// 四死球（打者が1塁へ進み、塁が詰まっていれば走者が押し出される結果）
+const WALK_FORCE_RESULTS = new Set(['四球','故意四球','死球']);
+
+/* 四死球の押し出し計算：打者を1塁へ置き、1塁が埋まっていれば 1→2→3→本塁 と順に押し出す。
+   走者名も一緒に動かす。満塁のときだけ runs=1（押し出し得点）。 */
+function forceWalk(runners, names, batterName){
+  const r=[...runners], n=[...(names||['','',''])];
+  let runs=0;
+  if(r[0]){
+    if(r[1]){
+      if(r[2]) runs=1;            // 満塁 → 3塁走者が生還
+      r[2]=true; n[2]=n[1]||'';   // 2塁走者 → 3塁
+    }
+    r[1]=true; n[1]=n[0]||'';     // 1塁走者 → 2塁
+  }
+  r[0]=true; n[0]=batterName||''; // 打者 → 1塁
+  return {runners:r, names:n, runs};
+}
+
 // 打者が出塁しうる結果（空き塁を追加したとき打者名を入れる）
 const RP_BATTER_REACH = new Set(['四球','故意四球','死球','失策','野選','振り逃げ','セーフティーバント','打撃妨害']);
 // ランナー配置更新が必要な結果（打者出塁系）
@@ -1896,6 +1915,8 @@ function handleConfirm(){
 
   // ランナー配置が必要か
   if(NEEDS_RUNNER_PLACE.has(result)){
+    document.getElementById('inp-rbi-hd').value =
+      document.getElementById('inp-rbi').value || '0';
     openRunnerPlace(result);
     return;
   }
@@ -1999,6 +2020,13 @@ function openRunnerPlace(result, batterBase=null, rbi=0, hitq=''){
   rpSel=-1;
   // 打者の進塁先が自動設定されない出塁系の結果は、空き塁をタップしたとき打者名を入れる
   rpBatterPending = (batterBase===null) && RP_BATTER_REACH.has(result);
+  // ★ 四死球：打者を1塁へ置き、押し出しが起きる場合は走者を（名前ごと）自動で進める
+  if(WALK_FORCE_RESULTS.has(result)){
+    const w=forceWalk(G.runners, G.runnerNames, rpBatterName);
+    rpState=w.runners; rpStateNames=w.names;
+    rpBatterBase=null;          // 打者はすでに1塁に置いてある
+    rpBatterPending=false;
+  }
 
   // ヒントテキスト
   const hints={
@@ -2006,9 +2034,9 @@ function openRunnerPlace(result, batterBase=null, rbi=0, hitq=''){
     '二塁打':'打者は2塁へ。元のランナーをタップして最終位置を設定してください',
     '三塁打':'打者は3塁へ。元のランナーをタップして最終位置を設定してください',
     '本塁打':'本塁打！全走者生還。配置確認してください',
-    '四球':'打者は1塁へ（押し出しがある場合、手動で調整してください）',
-    '故意四球':'打者は1塁へ',
-    '死球':'打者は1塁へ',
+    '四球':'打者は1塁へ。満塁なら押し出しで走者が自動で進み、得点・打点が1点加算されます',
+    '故意四球':'打者は1塁へ。満塁なら押し出しで走者が自動で進み、得点・打点が1点加算されます',
+    '死球':'打者は1塁へ。満塁なら押し出しで走者が自動で進み、得点・打点が1点加算されます',
     'ゴロアウト':'タッチアップ・進塁があればランナー位置を設定してください',
     'フライアウト':'タッチアップがあればランナー位置を設定してください',
     'ライナーアウト':'ランナーの最終位置を設定してください',
@@ -2337,6 +2365,11 @@ function confirmRunnerPlace(){
   const _v = (id,def='') => { try{ const e=document.getElementById(id); return e?e.value:def; }catch(e){return def;} };
   let rbi  = parseInt(_v('inp-rbi-hd') || _v('inp-rbi','0')) || 0;
   const hitq = _v('sel-hitq');
+  if(WALK_FORCE_RESULTS.has(pendingFinalResult)){
+    // ★ 押し出し：投球時点で満塁なら打点1（記録の打点・合計得点の両方に反映）
+    const pre = pitchStartRunners || [false,false,false];
+    rbi = (pre[0] && pre[1] && pre[2]) ? 1 : 0;
+  }
   if(pendingFinalResult==='本塁打'){
     // ★ 本塁打の打点＝打者本人＋投球時点で塁にいた走者の数（記録の打点・合計得点の両方に反映）
     const onBase = (pitchStartRunners || [false,false,false]).filter(Boolean).length;
@@ -2415,10 +2448,13 @@ function doCommit(result, rbi, hitq, hitX, hitY){
       }
     }
 
-    applyResult(result, rbi);
+    const _ret = applyResult(result, rbi);
+    if(typeof _ret === 'number') rec.rbi = _ret;   // ボール4つの四球：押し出し得点を打点に記録
+    const _forced = (typeof _ret === 'number') ? _ret
+                  : (WALK_FORCE_RESULTS.has(result) ? rbi : 0);
     saveG();
     refreshSB();
-    toast('✅ ' + result);
+    toast('✅ ' + result + (_forced > 0 ? `（押し出し +${_forced}点）` : ''));
     resetInputs();
     showView('pitch');
     _t('btn-confirm','☑ 投球を確定');
@@ -2579,9 +2615,14 @@ function applyResult(result, rbi){
     if(result==='ボール' || result==='ピッチクロック'){
       G.balls=Math.min(G.balls+1,4);
       if(G.balls>=4){
-        // 四球扱いで次打者へ（カウントリセット）
+        // ★ 四球扱い：打者を1塁へ置き、満塁なら押し出しで1点。次打者へ（カウントリセット）
+        const bat=(G.lineup[G.half]&&G.lineup[G.half][G.batterIdx[G.half]])||{};
+        const w=forceWalk(G.runners, G.runnerNames||['','',''], bat.name||'');
+        G.runners=w.runners; G.runnerNames=w.names;
+        if(w.runs>0) G.score[G.half]+=w.runs;
         G.balls=0;G.strikes=0;
         advanceBatter();
+        return w.runs;   // 押し出し得点（doCommitが記録の打点に反映）
       }
     } else if(result==='ストライク'||result==='見逃し'||result==='空振り'){
       G.strikes=Math.min(G.strikes+1,3);
