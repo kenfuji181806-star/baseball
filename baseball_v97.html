@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<title>野球詳細データ記録システム v9.3</title>
+<title>野球詳細データ記録システム v9.5</title>
 <style>
 /* ===== VARIABLES ===== */
 :root{
@@ -209,6 +209,9 @@ option{background:#151a2a;}
 }
 .base-rp.on{background:var(--orange);border-color:var(--obright);box-shadow:0 0 8px var(--orange);}
 .base-rp.disabled{opacity:.3;cursor:default;}
+.base-rp.sel{outline:3px solid #fff;outline-offset:2px;box-shadow:0 0 12px #fff;}
+.runner-chip.sel{outline:2px solid #fff;outline-offset:1px;}
+.rdot.sel{outline:2px solid #fff;outline-offset:2px;}
 /* 傾けなし・正方形 コンテナ200x200px 各頂点はホームを底辺に正方形ダイヤモンド配置 */
 /* ホーム(H):中心(100,175) 1塁:中心(175,100) 2塁:中心(100,25) 3塁:中心(25,100) */
 .base-rp[data-b="2"]{top:10px;  left:85px; background:#c8a060;border-color:#e8d080;}
@@ -413,7 +416,7 @@ tr:nth-child(even) td{background:#0e1220;}
 
 <!-- ==================== HEADER ==================== -->
 <div id="hdr">
-  <span class="hdr-title">⚾v9.3</span>
+  <span class="hdr-title">⚾v9.5</span>
   <button class="hbtn hbtn-g on" id="hb-pitch"   onclick="showView('pitch')">📝記録</button>
   <button class="hbtn hbtn-b"    id="hb-setup"   onclick="showView('setup')">⚙試合設定</button>
   <button class="hbtn hbtn-p"    id="hb-players" onclick="showView('players')">👥選手</button>
@@ -611,6 +614,16 @@ tr:nth-child(even) td{background:#0e1220;}
 
     <!-- ランナーチップ（誰が各塁にいるか） -->
     <div id="rp-chips" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;"></div>
+    <div class="fs10 txt-m tc" style="line-height:1.6;">
+      走者をタップ → 移動先の塁をタップで、名前ごと移動します。<br>
+      空いている塁をタップで走者を追加できます。
+    </div>
+    <div id="rp-actions" style="display:none;gap:8px;justify-content:center;">
+      <button class="mbtn mbtn-r" style="padding:7px 12px;font-size:12px;" onclick="rpRemoveSelected()">🗑 この走者を外す（アウト/生還）</button>
+      <button class="mbtn mbtn-gr" style="padding:7px 12px;font-size:12px;" onclick="rpClearSel()">選択解除</button>
+    </div>
+    <div id="rp-name-inputs" style="display:flex;flex-direction:column;gap:4px;"></div>
+    <datalist id="dl-rp-names"></datalist>
 
     <div class="sep"></div>
     <div class="fs11 txt-m">打者の進塁先（打球結果）</div>
@@ -1215,6 +1228,8 @@ const NEEDS_DETAIL = new Set([
   '併殺打',
 ]);
 
+// 打者が出塁しうる結果（空き塁を追加したとき打者名を入れる）
+const RP_BATTER_REACH = new Set(['四球','故意四球','死球','失策','野選','振り逃げ','セーフティーバント','打撃妨害']);
 // ランナー配置更新が必要な結果（打者出塁系）
 const NEEDS_RUNNER_PLACE = new Set([
   '【安打】→詳細入力',
@@ -1283,6 +1298,9 @@ let rpStateNames=['','','']; // ランナー名作業用
 let rpBatterBase=null;  // 打者の進塁先 0=1塁,1=2塁,2=3塁,3=本塁
 let rpBatterName='';    // 打者名
 // ★ 投球時点（結果を反映する前）のランナー状況。記録(history)にはこちらを保存する
+let rpSel=-1;                 // ランナー配置画面で移動元として選択中の塁(0-2)
+let rpBatterPending=false;    // 空き塁をタップしたとき、打者名を入れるか
+let sbSel=-1;                 // スコアバーで移動元として選択中の塁(0-2)
 let pitchStartRunners=null;
 let pitchStartRunnerNames=null;
 
@@ -1581,7 +1599,9 @@ function refreshSB(){
     : 0;
   _t('sb-pc', pitchCount > 0 ? `${pitchCount}球` : '');
   [0,1,2].forEach(i=>{
+    if(sbSel>=0 && !G.runners[sbSel]) sbSel=-1;
     document.getElementById(`rd${i+1}`)?.classList.toggle('on',!!G.runners[i]);
+    document.getElementById(`rd${i+1}`)?.classList.toggle('sel',sbSel===i);
     const nameEl = document.getElementById(`rn${i+1}`);
     if(nameEl) nameEl.textContent = G.runners[i] ? (G.runnerNames[i]||'') : '';
   });
@@ -1589,7 +1609,29 @@ function refreshSB(){
   _setupSBDrag();
 }
 const _t=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-function toggleR(i){G.runners[i]=!G.runners[i];saveG();refreshSB();}
+function toggleR(i){
+  if(!G.runnerNames) G.runnerNames=['','',''];
+  const bases=['1塁','2塁','3塁'];
+  if(sbSel<0){
+    if(G.runners[i]){
+      sbSel=i;
+      toast(`🏃 ${G.runnerNames[i]||bases[i]+'走者'} を選択：移動先の塁をタップ（同じ塁をもう一度タップで外す）`, 3200);
+    } else {
+      G.runners[i]=true; G.runnerNames[i]='';   // 空き塁 → 走者追加
+    }
+  } else if(sbSel===i){
+    G.runners[i]=false; G.runnerNames[i]=''; sbSel=-1;   // 同じ走者をもう一度 → 外す
+  } else {
+    // 名前ごと移動（移動先に走者がいれば入れ替え）
+    const mn=G.runnerNames[sbSel]||'';
+    const dOn=G.runners[i], dn=G.runnerNames[i]||'';
+    G.runners[i]=true;      G.runnerNames[i]=mn;
+    G.runners[sbSel]=dOn;   G.runnerNames[sbSel]=dOn?dn:'';
+    toast(`🏃 ${mn||bases[sbSel]+'走者'} → ${bases[i]}`);
+    sbSel=-1;
+  }
+  saveG();refreshSB();
+}
 
 /* ============================================================
    コースキャンバス
@@ -1822,6 +1864,7 @@ function handleConfirm(){
     document.getElementById('sel-hitq').selectedIndex=0;
     document.getElementById('inp-rbi-hd').value=
       document.getElementById('inp-rbi').value||'0';
+    document.getElementById('inp-rbi-hd').dataset.auto='';
 
     const isHit = result==='【安打】→詳細入力';
     const isOut = result==='【打球アウト】→詳細入力' || result==='併殺打';
@@ -1881,6 +1924,17 @@ function _buildKindBtns(kinds, colorClass){
 
 function selectKindBtn(val, wrap){
   document.getElementById('sel-hit-kind').value = val;
+  // 本塁打は打点＝打者＋塁上の走者数を自動入力（他の種別に切り替えたら元に戻す）
+  const hdRbi = document.getElementById('inp-rbi-hd');
+  if(hdRbi){
+    if(val==='本塁打' && pendingResult==='【安打】→詳細入力'){
+      hdRbi.value = 1 + G.runners.filter(Boolean).length;
+      hdRbi.dataset.auto = '1';
+    } else if(hdRbi.dataset.auto==='1'){
+      hdRbi.value = document.getElementById('inp-rbi').value || '0';
+      hdRbi.dataset.auto = '';
+    }
+  }
   if(!wrap) wrap = document.getElementById('hit-kind-btns');
   [...wrap.children].forEach(b=>{
     const sel = b.textContent===val;
@@ -1942,6 +1996,9 @@ function openRunnerPlace(result, batterBase=null, rbi=0, hitq=''){
   // 打者名を取得
   const bat=G.lineup[G.half][G.batterIdx[G.half]]||{};
   rpBatterName=bat.name||'';
+  rpSel=-1;
+  // 打者の進塁先が自動設定されない出塁系の結果は、空き塁をタップしたとき打者名を入れる
+  rpBatterPending = (batterBase===null) && RP_BATTER_REACH.has(result);
 
   // ヒントテキスト
   const hints={
@@ -1992,29 +2049,86 @@ function setBatterBase(idx){
 }
 
 function toggleRPBase(i){
-  rpState[i]=!rpState[i];
+  if(rpSel<0){
+    if(rpState[i]){
+      rpSel=i;                                   // 走者を選択
+    } else {
+      rpState[i]=true;                           // 空き塁 → 走者追加
+      if(rpBatterPending){ rpStateNames[i]=rpBatterName; rpBatterPending=false; }
+      else rpStateNames[i]='';
+    }
+  } else if(rpSel===i){
+    rpSel=-1;                                    // 同じ塁 → 選択解除
+  } else {
+    // 名前ごと移動（移動先に走者がいれば入れ替え）
+    const mn=rpStateNames[rpSel]||'';
+    const dOn=rpState[i], dn=rpStateNames[i]||'';
+    rpState[i]=true;        rpStateNames[i]=mn;
+    rpState[rpSel]=dOn;     rpStateNames[rpSel]=dOn?dn:'';
+    rpSel=-1;
+  }
   syncRPDiamond();
 }
+function rpRemoveSelected(){
+  if(rpSel<0) return;
+  rpState[rpSel]=false; rpStateNames[rpSel]='';  // アウト・生還 → 走者を外す
+  rpSel=-1;
+  syncRPDiamond();
+}
+function rpClearSel(){ rpSel=-1; syncRPDiamond(); }
 
+function _rpChipHtml(i){
+  const labels=['1塁','2塁','3塁'];
+  const name=rpStateNames[i]||'';
+  return `<span>${labels[i]}</span>${rpState[i]?`<b style="margin-left:4px;">${name||'●'}</b>`:''}`;
+}
 function syncRPDiamond(){
   [0,1,2].forEach(i=>{
     const base=[1,2,3][i];
     const el=document.querySelector(`#diamond-rp .base-rp[data-b="${base}"]`);
-    if(el) el.classList.toggle('on',!!rpState[i]);
+    if(el){ el.classList.toggle('on',!!rpState[i]); el.classList.toggle('sel',rpSel===i); }
   });
   const chips=document.getElementById('rp-chips');
   if(!chips) return;
-  const labels=['1塁','2塁','3塁'];
   chips.innerHTML='';
   rpState.forEach((on,i)=>{
     const chip=document.createElement('div');
-    chip.className='runner-chip'+(on?' on':'');
-    const name=rpStateNames[i]||'';
-    chip.innerHTML=`<span>${labels[i]}</span>${on?`<b style="margin-left:4px;">${name||'●'}</b>`:''}`;
+    chip.className='runner-chip'+(on?' on':'')+(rpSel===i?' sel':'');
+    chip.innerHTML=_rpChipHtml(i);
     chip.dataset.base=i;
     chip.onclick=()=>toggleRPBase(i);
     chips.appendChild(chip);
   });
+  // 選択中だけ「外す／選択解除」ボタンを表示
+  const act=document.getElementById('rp-actions');
+  if(act) act.style.display = rpSel>=0 ? 'flex' : 'none';
+  // 走者名の入力欄（走者がいる塁のみ・手で修正可能）
+  const dl=document.getElementById('dl-rp-names');
+  if(dl){
+    const names=[...new Set((G.lineup[G.half]||[]).map(p=>p.name).filter(Boolean))];
+    dl.innerHTML=names.map(n=>`<option value="${n}">`).join('');
+  }
+  const ni=document.getElementById('rp-name-inputs');
+  if(ni){
+    ni.innerHTML='';
+    const labels=['1塁','2塁','3塁'];
+    rpState.forEach((on,i)=>{
+      if(!on) return;
+      const row=document.createElement('div');
+      row.className='row';
+      row.style.cssText='gap:6px;align-items:center;';
+      row.innerHTML=`<span class="fs11 txt-m" style="width:34px;">${labels[i]}:</span>
+        <input type="text" list="dl-rp-names" placeholder="走者名" autocomplete="off"
+          style="flex:1;font-size:12px;">`;
+      const inp=row.querySelector('input');
+      inp.value=rpStateNames[i]||'';
+      inp.oninput=()=>{
+        rpStateNames[i]=inp.value.trim();
+        const c=chips.children[i]; if(c) c.innerHTML=_rpChipHtml(i);
+      };
+      ni.appendChild(row);
+    });
+  }
   // ドラッグ&ドロップ設定
   _setupRPDrag();
 }
@@ -2061,7 +2175,7 @@ function _bindDrag(el, fromIdx, type){
   el.addEventListener('touchstart', e=>{
     e.stopPropagation();
     const t=e.touches[0];
-    _drag={active:true, type, fromIdx, clone:null};
+    _drag={active:true, type, fromIdx, clone:null, moved:false, sx:t.clientX, sy:t.clientY};
     // クローン作成
     const clone=el.cloneNode(true);
     clone.style.cssText=`position:fixed;z-index:9999;opacity:0.85;pointer-events:none;
@@ -2077,6 +2191,7 @@ function _bindDrag(el, fromIdx, type){
     if(!_drag.active||!_drag.clone) return;
     e.preventDefault();
     const t=e.touches[0];
+    if(Math.abs(t.clientX-_drag.sx)+Math.abs(t.clientY-_drag.sy)>10) _drag.moved=true;
     _drag.clone.style.left=(t.clientX-50)+'px';
     _drag.clone.style.top=(t.clientY-20)+'px';
     // ドロップ先ハイライト
@@ -2092,6 +2207,13 @@ function _bindDrag(el, fromIdx, type){
     if(_drag.clone){ _drag.clone.remove(); _drag.clone=null; }
     el.style.opacity='';
     _clearDropHighlight();
+    if(!_drag.moved){
+      // ほぼ動かさずに離した → タップ（選択・移動・追加）として処理
+      const tp=_drag.type, fi=_drag.fromIdx;
+      _drag={active:false,type:'',fromIdx:-1,clone:null};
+      if(tp==='rp') toggleRPBase(fi); else if(tp==='sb') toggleR(fi);
+      return;
+    }
     const t=e.changedTouches[0];
     const under=document.elementFromPoint(t.clientX,t.clientY);
     // ランナー配置画面のダイヤモンド塁
@@ -2156,6 +2278,7 @@ function _initDropTargets(){
 
 function _doRunnerDrop(type, fromIdx, toIdx){
   if(fromIdx<0||fromIdx>2||toIdx<0||toIdx>2||fromIdx===toIdx) return;
+  rpSel=-1; sbSel=-1;
 
   if(type==='rp'){
     if(!rpState[fromIdx]) return;
@@ -2177,6 +2300,10 @@ function _doRunnerDrop(type, fromIdx, toIdx){
 }
 
 function confirmRunnerPlace(){
+  if(rpBatterBase!==null && rpBatterBase<3 && rpState[rpBatterBase]){
+    toast('⚠ 打者の進塁先に走者がいます。先に走者を移動（またはアウト/生還で外す）してください', 4200);
+    return;
+  }
   // 打者を配置に追加（安打等で打者が出塁する場合）
   if(rpBatterBase!==null && rpBatterBase<3){
     rpState[rpBatterBase]=true;
@@ -2208,8 +2335,13 @@ function confirmRunnerPlace(){
 
   // 通常の打席結果（安打・出塁系）
   const _v = (id,def='') => { try{ const e=document.getElementById(id); return e?e.value:def; }catch(e){return def;} };
-  const rbi  = parseInt(_v('inp-rbi-hd') || _v('inp-rbi','0')) || 0;
+  let rbi  = parseInt(_v('inp-rbi-hd') || _v('inp-rbi','0')) || 0;
   const hitq = _v('sel-hitq');
+  if(pendingFinalResult==='本塁打'){
+    // ★ 本塁打の打点＝打者本人＋投球時点で塁にいた走者の数（記録の打点・合計得点の両方に反映）
+    const onBase = (pitchStartRunners || [false,false,false]).filter(Boolean).length;
+    rbi = 1 + onBase;
+  }
   doCommit(pendingFinalResult, rbi, hitq, P.hitX, P.hitY);
 }
 
@@ -2366,6 +2498,7 @@ function confirmKensei(){
   // ランナー状況を更新
   if(isOut && G.runners[bi]){
     G.runners[bi] = false;
+    G.runnerNames[bi] = '';
     G.outs = Math.min(3, G.outs + 1);
   }
 
@@ -2470,8 +2603,9 @@ function applyResult(result, rbi){
   G.balls=0;G.strikes=0;
 
   if(result==='本塁打'){
-    // 本塁打: 打者+全ランナーを自動計算（rbi手入力は無視）
-    const cnt=1+G.runners.filter(Boolean).length;
+    // 本塁打: 得点＝打点（打者＋投球時点の走者数）。confirmRunnerPlaceで算出した値を使う
+    // （ここではランナー配置がすでに空になっているため、G.runnersからは数えられない）
+    const cnt=Math.max(1, rbi||0);
     G.score[G.half]+=cnt;
     G.runners=[false,false,false];
     G.runnerNames=['','',''];
@@ -2569,7 +2703,7 @@ function doRunnerMove(type){
   const isOut=type.includes('死')||type==='挟殺';
   if(isOut){
     // アウト1つ加算してランナー確認
-    rpState=[...G.runners];rpBatterBase=null;
+    rpState=[...G.runners];rpStateNames=[...G.runnerNames];rpBatterBase=null;rpSel=-1;rpBatterPending=false;
     pendingFinalResult=type;
     _t('rp-context',type);
     _t('rp-hint','アウトになった走者をタップでOFFにして「配置を確定」してください');
@@ -2581,7 +2715,7 @@ function doRunnerMove(type){
     pendingResult=type;
   } else {
     // 進塁系（暴投・PB・ボーク・盗塁）
-    rpState=[...G.runners];rpBatterBase=null;
+    rpState=[...G.runners];rpStateNames=[...G.runnerNames];rpBatterBase=null;rpSel=-1;rpBatterPending=false;
     pendingFinalResult=type;
     pendingResult=type;
     _t('rp-context',type);
