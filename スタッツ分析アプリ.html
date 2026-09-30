@@ -1217,7 +1217,7 @@ function pageTeam(team){
       const rows = list.filter(r => !q || sn(r.player).includes(q)).sort((a, b) => { const x = a[m], y = b[m]; const nx = isNum(x) ? x : (LOWER.has(m) ? Infinity : -Infinity), ny = isNum(y) ? y : (LOWER.has(m) ? Infinity : -Infinity); return LOWER.has(m) ? nx - ny : ny - nx; });
       box.replaceChildren(...(rows.length ? rows.map(r => playerRow(r, isB, m, false)) : [el("div", {class: "row", style: "cursor:default"}, el("span", {class: "s"}, "該当する選手がいません"))]));
     };
-    out.push(field(T.q, isB ? `${team}の野手を検索` : `${team}の投手を検索`, v => { T.q = v; draw(); }, {style: "margin:12px 0 4px"}),
+    out.push(el("button", {class: "btn", style: "margin-top:12px;width:100%", onclick: () => { S.rank.role = isB ? "bat" : "pit"; go("rank", team); }}, `${team}の${isB ? "野手" : "投手"}ランキングを見る`), field(T.q, isB ? `${team}の野手を検索` : `${team}の投手を検索`, v => { T.q = v; draw(); }, {style: "margin:12px 0 4px"}),
       chips(sorts, T[sk], v => T[sk] = v, c => (isB ? LAB : PLAB)[c] || c), note(isB ? "並び順を選べます" : "並び順を選べます（防御率・WHIP・FIP は低い順）"), box);
     draw();
   } else if(T.tab === "games"){
@@ -1454,24 +1454,46 @@ function pagePlayers(){
 }
 
 // ---------- ランキング ----------
-function pageRank(){
+function pageRank(teamArg){
   const R = S.rank, out = [el("h1", {class: "name"}, "ランキング")];
   const roles = [C.pb.length ? ["bat","野手"] : null, C.pp.length ? ["pit","投手"] : null].filter(Boolean);
   if(!roles.length) return [...out, empty("選手のデータがありません。")];
   if(!roles.some(r => r[0] === R.role)) R.role = roles[0][0];
-  const isB = R.role === "bat", all = isB ? C.pb : C.pp, ms = isB ? ["OPS","AVG","OBP","SLG","ISO","HR","RBI","SB","BB%","K%"].filter(has) : ["ERA","WHIP","FIP","K/9","BB/9","K/BB","SO","W","SV","OAVG"];
+  const teams = C.teams.map(t => t.team);
+  if(teamArg !== undefined) R.team = teams.includes(teamArg) ? teamArg : "";
+  if(R.team && !teams.includes(R.team)) R.team = "";
+  const isB = R.role === "bat", all = isB ? C.pb : C.pp, ms = isB ? ["OPS","AVG","OBP","SLG","ISO","HR","RBI","SB","BB%","K%"].filter(has) : ["ERA","WHIP","FIP","K/9","BB/9","K/BB","SO","W","SV","OAVG"].filter(m => all.some(r => isNum(r[m])));
   if(!ms.includes(R.m)) R.m = ms[0];
-  const val = r => isB ? r.PA : r.outs / 3;
-  if(R.min[R.role] == null){ const v = all.map(val).sort((a, b) => a - b); R.min[R.role] = Math.max(1, Math.floor(v[Math.floor(v.length / 2)] || 1)); }
-  const mn = R.min[R.role], asc = LOWER.has(R.m) || (!isB && R.m === "BB%") || (isB && R.m === "K%");
-  const list = all.filter(r => val(r) >= mn && isNum(r[R.m])).sort((a, b) => asc ? a[R.m] - b[R.m] : b[R.m] - a[R.m]).slice(0, 30);
-  const step = d => { R.min[R.role] = Math.max(0, mn + d); render(true); };
-  out.push(roles.length > 1 ? seg(roles, R.role, v => R.role = v) : null, el("label", {class: "lbl"}, "指標"), chips(ms, R.m, v => R.m = v, c => (isB ? BAT_L : PIT_L)[c] || c),
-    el("div", {class: "fbar"}, el("span", {}, isB ? "規定打席" : "規定投球回"), el("button", {class: "btn", "aria-label": "減らす", onclick: () => step(isB ? -5 : -1)}, "−"),
-      el("b", {style: "font-family:var(--num);font-size:1.3rem;min-width:2em;text-align:center"}, mn), el("button", {class: "btn", "aria-label": "増やす", onclick: () => step(isB ? 5 : 1)}, "＋"), el("span", {class: "note", style: "margin:0"}, "以上")),
-    asc ? note("低いほど上位です。") : null,
-    list.length ? el("div", {class: "list"}, list.map((r, i) => listRow({rank: i + 1, title: r.player, sub: r.team + (isB ? `　${r.PA}打席` : `　${r.IP_str}回`), big: fmt(R.m, r[R.m]),
-      onClick: () => go("player", r.team, r.player, R.role)}))) : empty("条件を満たす選手がいません。規定を下げてください。"));
+  const val = r => isB ? r.PA : r.outs / 3, unit = isB ? "打席" : "回";
+  const scope = R.team ? all.filter(r => r.team === R.team) : all;
+  // 規定の初期値：対象選手の中央値（自分で変えたらその値を使う）
+  const auto = (() => { const v = scope.map(val).sort((a, b) => a - b); return Math.max(1, Math.floor(v[Math.floor(v.length / 2)] || 1)); })();
+  const userSet = R.min[R.role] != null, mn = userSet ? R.min[R.role] : auto;
+  const asc = LOWER.has(R.m) || (!isB && R.m === "BB%") || (isB && R.m === "K%");
+  const cmp = (a, b) => asc ? a[R.m] - b[R.m] : b[R.m] - a[R.m];
+  const rankOf = list => { const rk = new Map(); list.forEach((r, i) => rk.set(r, i > 0 && list[i - 1][R.m] === r[R.m] ? rk.get(list[i - 1]) : i + 1)); return rk; };
+  const overall = all.filter(r => val(r) >= mn && isNum(r[R.m])).sort(cmp), oRank = rankOf(overall);
+  const qualified = scope.filter(r => val(r) >= mn && isNum(r[R.m])).sort(cmp), qRank = rankOf(qualified);
+  const shown = R.team ? qualified : qualified.slice(0, R.limit || 30);
+  const setMin = v => { R.min[R.role] = Math.max(0, v); render(true); };
+  const inp = el("input", {class: "fld", type: "number", inputmode: isB ? "numeric" : "decimal", min: 0, step: isB ? 1 : 0.1, value: mn, "aria-label": isB ? "最低打席数" : "最低投球回",
+    style: "width:6.5em;text-align:center;font-family:var(--num);font-size:1.3rem;font-weight:600;padding:6px 8px",
+    onchange: e => { const v = parseFloat(e.target.value); if(!isNaN(v)) setMin(v); }, onkeydown: e => { if(e.key === "Enter") e.target.blur(); }});
+  const presets = isB ? [0, 5, 10, 20, 30, 50] : [0, 3, 5, 10, 20, 30];
+  out.push(roles.length > 1 ? seg(roles, R.role, v => R.role = v) : null,
+    el("label", {class: "lbl"}, "範囲"), chips(["", ...teams], R.team || "", v => { R.team = v; }, c => c || "全体", true),
+    el("label", {class: "lbl"}, "指標"), chips(ms, R.m, v => R.m = v, c => (isB ? BAT_L : PIT_L)[c] || c),
+    el("label", {class: "lbl"}, isB ? "何打席以上の選手を表示するか" : "何回以上投げた投手を表示するか"),
+    el("div", {class: "fbar", style: "margin-top:0"}, el("button", {class: "btn", "aria-label": "減らす", onclick: () => setMin(Math.max(0, mn - (isB ? 1 : 1)))}, "−"), inp,
+      el("button", {class: "btn", "aria-label": "増やす", onclick: () => setMin(mn + 1)}, "＋"), el("span", {}, unit + "以上")),
+    el("div", {class: "chips wrap"}, presets.map(p => el("button", {class: "chip" + (userSet && p === mn ? " on" : ""), onclick: () => setMin(p)}, p === 0 ? "制限なし" : `${p}${unit}`)),
+      el("button", {class: "chip" + (!userSet ? " on" : ""), onclick: () => { R.min[R.role] = null; render(true); }}, `自動（${auto}${unit}）`)),
+    note(`${R.team || "全体"}：${qualified.length}人が対象` + (scope.length > qualified.length ? `（${mn}${unit}未満などで${scope.length - qualified.length}人を除外）` : "") + (asc ? "。低いほど上位です。" : "。") + (!R.team && qualified.length > shown.length ? `上位${shown.length}人を表示。` : "")));
+  if(!shown.length) out.push(empty(`条件を満たす選手がいません。${isB ? "打席数" : "投球回"}の条件を下げてください。`));
+  else out.push(el("div", {class: "list"}, shown.map(r => listRow({rank: qRank.get(r), title: r.player,
+    sub: [R.team ? null : r.team, isB ? `${r.PA}打席` : `${r.IP_str}回`, R.team ? `全体${oRank.get(r)}位／${overall.length}人` : null].filter(Boolean).join("　"),
+    big: fmt(R.m, r[R.m]), onClick: () => go("player", r.team, r.player, R.role)}))));
+  if(!R.team && qualified.length > shown.length) out.push(el("div", {style: "text-align:center;margin:12px 0"}, el("button", {class: "btn", onclick: () => { R.limit = (R.limit || 30) + 30; render(true); }}, "もっと見る")));
   return out;
 }
 
@@ -1535,7 +1557,7 @@ function render(keepScroll){
   if(r[0] === "team") body = pageTeam(r[1]);
   else if(r[0] === "player") body = pagePlayer(r[1], r[2], r[3]);
   else if(r[0] === "players") body = pagePlayers();
-  else if(r[0] === "rank") body = pageRank();
+  else if(r[0] === "rank") body = pageRank(r[1]);
   else if(r[0] === "data") body = pageData();
   else body = pageHome();
   document.getElementById("app").replaceChildren(...body.flat().filter(Boolean));
