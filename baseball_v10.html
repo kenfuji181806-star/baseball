@@ -702,28 +702,24 @@ tr:nth-child(even) td{background:#0e1220;}
       <div class="g2" style="margin-bottom:6px;">
         <div class="fld"><label>先攻投手（裏で投げる）</label>
           <div class="row">
-            <input id="gs-top-p" list="dl-top-players" placeholder="名前入力 or 候補から選択"
-              style="flex:1;font-size:11px;" autocomplete="off">
+            <div id="gs-top-p-w" style="flex:1;min-width:0;"></div>
             <select id="gs-top-parm" style="width:48px;font-size:11px;"><option>右</option><option>左</option></select>
           </div></div>
         <div class="fld"><label>先攻捕手</label>
           <div class="row">
-            <input id="gs-top-c" list="dl-top-players" placeholder="名前入力 or 候補から選択"
-              style="flex:1;font-size:11px;" autocomplete="off">
+            <div id="gs-top-c-w" style="flex:1;min-width:0;"></div>
             <select id="gs-top-carm" style="width:48px;font-size:11px;"><option>右</option><option>左</option></select>
           </div></div>
       </div>
       <div class="g2">
         <div class="fld"><label>後攻投手（表で投げる）</label>
           <div class="row">
-            <input id="gs-bot-p" list="dl-bot-players" placeholder="名前入力 or 候補から選択"
-              style="flex:1;font-size:11px;" autocomplete="off">
+            <div id="gs-bot-p-w" style="flex:1;min-width:0;"></div>
             <select id="gs-bot-parm" style="width:48px;font-size:11px;"><option>右</option><option>左</option></select>
           </div></div>
         <div class="fld"><label>後攻捕手</label>
           <div class="row">
-            <input id="gs-bot-c" list="dl-bot-players" placeholder="名前入力 or 候補から選択"
-              style="flex:1;font-size:11px;" autocomplete="off">
+            <div id="gs-bot-c-w" style="flex:1;min-width:0;"></div>
             <select id="gs-bot-carm" style="width:48px;font-size:11px;"><option>右</option><option>左</option></select>
           </div></div>
       </div>
@@ -776,6 +772,12 @@ tr:nth-child(even) td{background:#0e1220;}
 <!-- ========== VIEW: 選手登録 ========== -->
 <div class="view" id="v-players">
   <div class="vscroll">
+    <div class="sec">
+      <div class="sec-t">📋 R8リーグ名簿</div>
+      <div class="fs11 txt-m" style="margin-bottom:8px;line-height:1.6;">6大学・165名（名前・守備位置）を登録します。登録済みの選手は変更しません。
+        打席の左右は元データにないため「右」で登録しています。左打ち・両打ちの選手は下の「選手一覧・編集」で直してください。</div>
+      <button class="mbtn mbtn-g mbtn-full" style="padding:9px;" onclick="mergeRosterR8Btn()">📋 R8名簿を登録</button>
+    </div>
     <div class="sec">
       <div class="sec-t">チーム管理</div>
       <div class="row" style="flex-wrap:wrap;gap:6px;">
@@ -1242,6 +1244,37 @@ tr:nth-child(even) td{background:#0e1220;}
 </div>
 
 <script>
+/* ===== 公開ページ（claude.ai）でも動くようにする共通処理 ===== */
+const _IN_FRAME = (()=>{ try{ return window.top!==window.self; }catch(e){ return true; } })();
+let _DLNS = null;
+(async()=>{ try{ if(window.claude && window.claude.use) _DLNS = await window.claude.use('downloads'); }catch(e){} })();
+/* ファイル保存：公開ページでは「ダウンロード」許可で保存、それ以外は通常のダウンロード */
+async function saveFileOut(fname, blob){
+  if(_DLNS){
+    try{ await _DLNS.save({filename:fname, data:blob}); return true; }
+    catch(e){
+      if(e && e.code==='declined') { try{ toast('保存をキャンセルしました'); }catch(_){} return false; }
+      try{ toast('⚠ 保存できませんでした: '+(e&&e.message||e&&e.code||e), 5000); }catch(_){}
+      return false;
+    }
+  }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=fname; a.style.display='none';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 1500);
+  return true;
+}
+/* 公開ページでは確認ダイアログが出ないので「同じボタンをもう一度押すと実行」にする */
+if(_IN_FRAME){
+  let _cp=null, _ct=0;
+  window.confirm = function(msg){
+    if(_cp===msg && Date.now()-_ct<6000){ _cp=null; return true; }
+    _cp=msg; _ct=Date.now();
+    try{ toast(String(msg).split('\n')[0]+'　→ もう一度押すと実行します', 5000); }catch(e){}
+    return false;
+  };
+}
+
 /* ============================================================
    BBStats — 一球データから試合ごとの選手成績を計算する共通エンジン
    （記録アプリ・集計アプリの両方で同じコードを使う）
@@ -1540,7 +1573,29 @@ const BBStats = (() => {
 /* ============================================================
    定数
    ============================================================ */
-const TEAMS_DEF = ['九大','久留米大','福大','西南大','九国大','北九大'];
+/* ★R8 名簿（成績集計表R8から登録。打席の左右は元データに無いため「右」で仮登録） */
+const ROSTER_R8 = {"福岡大":[{"name":"古賀","arm":"右","pos":"三塁手","posType":"f"},{"name":"松西","arm":"右","pos":"左翼手","posType":"f"},{"name":"和田","arm":"右","pos":"投手","posType":"p"},{"name":"秋元","arm":"右","pos":"左翼手","posType":"f"},{"name":"大道蓮","arm":"右","pos":"二塁手","posType":"f"},{"name":"鶴田","arm":"右","pos":"一塁手","posType":"f"},{"name":"益野","arm":"右","pos":"三塁手","posType":"f"},{"name":"岡本","arm":"右","pos":"捕手","posType":"f"},{"name":"日髙","arm":"右","pos":"左翼手","posType":"f"},{"name":"黒石","arm":"右","pos":"左翼手","posType":"f"},{"name":"岩屋","arm":"右","pos":"左翼手","posType":"f"},{"name":"野田","arm":"右","pos":"二塁手","posType":"f"},{"name":"江藤","arm":"右","pos":"遊撃手","posType":"f"},{"name":"永田","arm":"右","pos":"左翼手","posType":"f"},{"name":"森廣","arm":"右","pos":"投手","posType":"p"},{"name":"多田野","arm":"右","pos":"","posType":"f"},{"name":"中村","arm":"右","pos":"一塁手","posType":"f"},{"name":"村上","arm":"右","pos":"捕手","posType":"f"},{"name":"立川","arm":"右","pos":"左翼手","posType":"f"},{"name":"益崎","arm":"右","pos":"投手","posType":"p"},{"name":"大上","arm":"右","pos":"投手","posType":"p"},{"name":"沼","arm":"右","pos":"投手","posType":"p"},{"name":"木村","arm":"右","pos":"投手","posType":"p"},{"name":"小林","arm":"右","pos":"投手","posType":"p"},{"name":"楠井","arm":"右","pos":"投手","posType":"p"},{"name":"堂満","arm":"右","pos":"投手","posType":"p"},{"name":"升田","arm":"右","pos":"投手","posType":"p"}],"久留米":[{"name":"大坂","arm":"右","pos":"左翼手","posType":"f"},{"name":"杉村","arm":"右","pos":"左翼手","posType":"f"},{"name":"寺原","arm":"右","pos":"左翼手","posType":"f"},{"name":"内村","arm":"右","pos":"三塁手","posType":"f"},{"name":"西岡晃","arm":"右","pos":"一塁手","posType":"f"},{"name":"西村","arm":"右","pos":"","posType":"f"},{"name":"森竹","arm":"右","pos":"捕手","posType":"f"},{"name":"大場","arm":"右","pos":"二塁手","posType":"f"},{"name":"木村","arm":"右","pos":"投手","posType":"p"},{"name":"在津","arm":"右","pos":"遊撃手","posType":"f"},{"name":"伊藤","arm":"右","pos":"一塁手","posType":"f"},{"name":"江藤","arm":"右","pos":"遊撃手","posType":"f"},{"name":"瓜生","arm":"右","pos":"","posType":"f"},{"name":"吉岡","arm":"右","pos":"投手","posType":"p"},{"name":"安武","arm":"右","pos":"一塁手","posType":"f"},{"name":"堤","arm":"右","pos":"左翼手","posType":"f"},{"name":"楠林","arm":"右","pos":"投手","posType":"p"},{"name":"緒方","arm":"右","pos":"","posType":"f"},{"name":"重","arm":"右","pos":"投手","posType":"p"},{"name":"原野","arm":"右","pos":"遊撃手","posType":"f"},{"name":"蔵元","arm":"右","pos":"","posType":"f"},{"name":"小原","arm":"右","pos":"捕手","posType":"f"},{"name":"橋本","arm":"右","pos":"投手","posType":"p"},{"name":"江下","arm":"右","pos":"投手","posType":"p"},{"name":"北田","arm":"右","pos":"投手","posType":"p"},{"name":"清水","arm":"右","pos":"投手","posType":"p"},{"name":"秋元","arm":"右","pos":"投手","posType":"p"},{"name":"山川","arm":"右","pos":"投手","posType":"p"}],"九国大":[{"name":"園田","arm":"右","pos":"二塁手","posType":"f"},{"name":"久保","arm":"右","pos":"三塁手","posType":"f"},{"name":"金城","arm":"右","pos":"遊撃手","posType":"f"},{"name":"米崎","arm":"右","pos":"三塁手","posType":"f"},{"name":"倉橋","arm":"右","pos":"左翼手","posType":"f"},{"name":"一ノ瀬","arm":"右","pos":"捕手","posType":"f"},{"name":"杉村","arm":"右","pos":"投手","posType":"p"},{"name":"白元","arm":"右","pos":"投手","posType":"p"},{"name":"稲嶺","arm":"右","pos":"一塁手","posType":"f"},{"name":"林空","arm":"右","pos":"左翼手","posType":"f"},{"name":"石橋叶","arm":"右","pos":"左翼手","posType":"f"},{"name":"入田","arm":"右","pos":"左翼手","posType":"f"},{"name":"菱岡","arm":"右","pos":"三塁手","posType":"f"},{"name":"兒島","arm":"右","pos":"","posType":"f"},{"name":"嘉味田","arm":"右","pos":"左翼手","posType":"f"},{"name":"佐藤","arm":"右","pos":"投手","posType":"p"},{"name":"吉田空","arm":"右","pos":"左翼手","posType":"f"},{"name":"平田","arm":"右","pos":"三塁手","posType":"f"},{"name":"福島","arm":"右","pos":"投手","posType":"p"},{"name":"山口","arm":"右","pos":"投手","posType":"p"},{"name":"金岡","arm":"右","pos":"投手","posType":"p"},{"name":"氏原","arm":"右","pos":"投手","posType":"p"},{"name":"堀切","arm":"右","pos":"投手","posType":"p"},{"name":"原田","arm":"右","pos":"投手","posType":"p"},{"name":"遠矢","arm":"右","pos":"投手","posType":"p"},{"name":"松元白","arm":"右","pos":"投手","posType":"p"}],"北九大":[{"name":"古謝","arm":"右","pos":"一塁手","posType":"f"},{"name":"川内","arm":"右","pos":"一塁手","posType":"f"},{"name":"竹下","arm":"右","pos":"左翼手","posType":"f"},{"name":"木下蓮","arm":"右","pos":"左翼手","posType":"f"},{"name":"黒田","arm":"右","pos":"左翼手","posType":"f"},{"name":"成尾","arm":"右","pos":"三塁手","posType":"f"},{"name":"中尾","arm":"右","pos":"左翼手","posType":"f"},{"name":"渡邉","arm":"右","pos":"左翼手","posType":"f"},{"name":"小畑","arm":"右","pos":"投手","posType":"p"},{"name":"本田","arm":"右","pos":"投手","posType":"p"},{"name":"永田","arm":"右","pos":"遊撃手","posType":"f"},{"name":"福田","arm":"右","pos":"捕手","posType":"f"},{"name":"田中悠","arm":"右","pos":"投手","posType":"p"},{"name":"五味","arm":"右","pos":"","posType":"f"},{"name":"湯浅","arm":"右","pos":"捕手","posType":"f"},{"name":"信國","arm":"右","pos":"二塁手","posType":"f"},{"name":"牧","arm":"右","pos":"二塁手","posType":"f"},{"name":"志垣","arm":"右","pos":"遊撃手","posType":"f"},{"name":"松尾","arm":"右","pos":"","posType":"f"},{"name":"松延","arm":"右","pos":"投手","posType":"p"},{"name":"髙山","arm":"右","pos":"投手","posType":"p"},{"name":"幸野","arm":"右","pos":"投手","posType":"p"},{"name":"加茂","arm":"右","pos":"投手","posType":"p"},{"name":"山下薫","arm":"右","pos":"投手","posType":"p"},{"name":"宮原","arm":"右","pos":"投手","posType":"p"},{"name":"吉松","arm":"右","pos":"投手","posType":"p"},{"name":"大石","arm":"右","pos":"投手","posType":"p"},{"name":"木下諒","arm":"右","pos":"投手","posType":"p"}],"西南大":[{"name":"矢野","arm":"右","pos":"左翼手","posType":"f"},{"name":"小嶋","arm":"右","pos":"遊撃手","posType":"f"},{"name":"喜多","arm":"右","pos":"二塁手","posType":"f"},{"name":"佐藤輝","arm":"右","pos":"三塁手","posType":"f"},{"name":"山中","arm":"右","pos":"左翼手","posType":"f"},{"name":"重松","arm":"右","pos":"投手","posType":"p"},{"name":"上野裕","arm":"右","pos":"投手","posType":"p"},{"name":"田中康","arm":"右","pos":"一塁手","posType":"f"},{"name":"青柳","arm":"右","pos":"捕手","posType":"f"},{"name":"荒下","arm":"右","pos":"投手","posType":"p"},{"name":"今中","arm":"右","pos":"二塁手","posType":"f"},{"name":"有本","arm":"右","pos":"左翼手","posType":"f"},{"name":"入井","arm":"右","pos":"投手","posType":"p"},{"name":"山本善","arm":"右","pos":"","posType":"f"},{"name":"髙田","arm":"右","pos":"左翼手","posType":"f"},{"name":"平田","arm":"右","pos":"一塁手","posType":"f"},{"name":"松本","arm":"右","pos":"捕手","posType":"f"},{"name":"貞松","arm":"右","pos":"左翼手","posType":"f"},{"name":"松岡","arm":"右","pos":"二塁手","posType":"f"},{"name":"秋元","arm":"右","pos":"","posType":"f"},{"name":"山本煌","arm":"右","pos":"一塁手","posType":"f"},{"name":"多田野","arm":"右","pos":"一塁手","posType":"f"},{"name":"三浦","arm":"右","pos":"","posType":"f"},{"name":"津田","arm":"右","pos":"投手","posType":"p"},{"name":"中村","arm":"右","pos":"投手","posType":"p"},{"name":"柳原","arm":"右","pos":"投手","posType":"p"},{"name":"小金丸","arm":"右","pos":"投手","posType":"p"},{"name":"沖田","arm":"右","pos":"投手","posType":"p"},{"name":"坂口","arm":"右","pos":"投手","posType":"p"},{"name":"溝部","arm":"右","pos":"投手","posType":"p"},{"name":"梶原","arm":"右","pos":"投手","posType":"p"},{"name":"石原","arm":"右","pos":"投手","posType":"p"},{"name":"松永","arm":"右","pos":"投手","posType":"p"}],"九州大":[{"name":"堺","arm":"右","pos":"左翼手","posType":"f"},{"name":"岡本","arm":"右","pos":"左翼手","posType":"f"},{"name":"満岡","arm":"右","pos":"一塁手","posType":"f"},{"name":"堀内","arm":"右","pos":"遊撃手","posType":"f"},{"name":"西澤","arm":"右","pos":"左翼手","posType":"f"},{"name":"藤木謙","arm":"右","pos":"捕手","posType":"f"},{"name":"始関","arm":"右","pos":"三塁手","posType":"f"},{"name":"大渕","arm":"右","pos":"二塁手","posType":"f"},{"name":"尾國","arm":"右","pos":"二塁手","posType":"f"},{"name":"宮口","arm":"右","pos":"二塁手","posType":"f"},{"name":"新井","arm":"右","pos":"投手","posType":"p"},{"name":"石井","arm":"右","pos":"二塁手","posType":"f"},{"name":"細江","arm":"右","pos":"左翼手","posType":"f"},{"name":"中山","arm":"右","pos":"","posType":"f"},{"name":"真井","arm":"右","pos":"","posType":"f"},{"name":"寺内","arm":"右","pos":"捕手","posType":"f"},{"name":"吉原","arm":"右","pos":"投手","posType":"p"},{"name":"冨岡","arm":"右","pos":"投手","posType":"p"},{"name":"山西","arm":"右","pos":"投手","posType":"p"},{"name":"奥野","arm":"右","pos":"投手","posType":"p"},{"name":"澤岻","arm":"右","pos":"投手","posType":"p"},{"name":"津野","arm":"右","pos":"投手","posType":"p"},{"name":"楡井","arm":"右","pos":"投手","posType":"p"}]};
+const TEAMS_DEF = Object.keys(ROSTER_R8);
+const _OLD_DEF_TEAMS = ['九大','久留米大','福大','西南大','九国大','北九大'];
+const _ROSTER_FLAG = 'bbr_roster_r8_v1';
+/* 名簿を選手データに追加（同じ名前の選手はそのまま。空の旧チームは整理） */
+function mergeRosterR8(){
+  const pl = LP();
+  _OLD_DEF_TEAMS.forEach(t=>{ if(!ROSTER_R8[t] && Array.isArray(pl[t]) && !pl[t].length) delete pl[t]; });
+  let added=0;
+  Object.entries(ROSTER_R8).forEach(([team,list])=>{
+    if(!Array.isArray(pl[team])) pl[team]=[];
+    list.forEach(p=>{ if(!pl[team].some(x=>x.name===p.name)){ pl[team].push({...p}); added++; } });
+  });
+  SP(pl);
+  try{ _LS.set(_ROSTER_FLAG,'1'); }catch(e){}
+  return added;
+}
+function mergeRosterR8Btn(){
+  const n=mergeRosterR8();
+  initPlayerView();
+  toast(n?`✅ R8名簿から ${n}名を登録しました`:'✅ 名簿の選手はすべて登録済みです');
+}
 
 const PITCH_TYPES = ['','直球','スライダー','カーブ','チェンジアップ','フォーク',
   'カットボール','シュート','シンカー','ツーシーム','スプリット'];
@@ -3212,15 +3267,6 @@ function buildSetupView(){
   // バッテリープルダウン（チーム別）→ datalist更新
   refreshBatterySelects();
 
-  // バッテリー入力欄に保存済みの値を復元
-  const batteryMap = {
-    'gs-top-p': G.topPitcher, 'gs-top-c': G.topCatcher,
-    'gs-bot-p': G.botPitcher, 'gs-bot-c': G.botCatcher,
-  };
-  Object.entries(batteryMap).forEach(([id, val])=>{
-    const el = document.getElementById(id);
-    if(el && val) el.value = val;
-  });
   // 投球腕・捕手腕
   const armMap = {
     'gs-top-parm': G.topPitcherArm, 'gs-top-carm': G.topCatcherArm,
@@ -3247,67 +3293,108 @@ function getTeamPlayers(half){
   return players[team]||[];
 }
 
+/* ★選手プルダウン（一覧から選ぶ／一覧にない選手は入力） */
+function _pickerHTML(id, players, cur, kind, onchg){
+  cur=(cur||'').trim();
+  const P_=players.filter(p=>p.posType==='p'||p.pos==='投手'), F_=players.filter(p=>!(p.posType==='p'||p.pos==='投手'));
+  const C_=F_.filter(p=>p.pos==='捕手'), F2=F_.filter(p=>p.pos!=='捕手');
+  const opt=p=>`<option value="${esc(p.name)}">${esc(p.name)}${p.pos?'（'+esc(String(p.pos).replace(/手$/,''))+'）':''}${p.arm&&p.arm!=='右'?' '+esc(p.arm):''}</option>`;
+  const grp=(l,list)=>list.length?`<optgroup label="${l}">${list.map(opt).join('')}</optgroup>`:'';
+  const groups = kind==='p' ? grp('投手',P_)+grp('野手',F_)
+               : kind==='c' ? grp('捕手',C_)+grp('野手',F2)+grp('投手',P_)
+               : grp('野手',F_)+grp('投手',P_);
+  const inList=players.some(p=>p.name===cur);
+  const manual=!!cur && !inList;
+  return `<select id="${id}" style="width:100%;font-size:11px;padding:4px 5px;" onchange="_pickerChg('${id}');${onchg||''}">
+      <option value="">— 選択 —</option>${groups}<option value="__manual">✏ 一覧にない選手を入力</option></select>
+    <input id="${id}-txt" type="text" placeholder="選手名を入力" autocomplete="off" value="${manual?esc(cur):''}"
+      style="width:100%;font-size:11px;padding:4px 5px;margin-top:2px;${manual?'':'display:none;'}" ${onchg?`oninput="${onchg}"`:''}>
+    <script-init data-id="${id}" data-v="${esc(manual?'__manual':(inList?cur:''))}"></script-init>`;
+}
+function _pickerInit(root){
+  (root||document).querySelectorAll('script-init').forEach(e=>{
+    const sel=document.getElementById(e.dataset.id); if(sel) sel.value=e.dataset.v||'';
+    e.remove();
+  });
+}
+function _pickerChg(id){
+  const sel=document.getElementById(id), t=document.getElementById(id+'-txt');
+  if(!sel||!t) return;
+  t.style.display = sel.value==='__manual' ? '' : 'none';
+  if(sel.value==='__manual') setTimeout(()=>t.focus(),0);
+}
+function _pickVal(id){
+  const sel=document.getElementById(id); if(!sel) return '';
+  if(sel.value==='__manual') return (document.getElementById(id+'-txt')?.value||'').trim();
+  return (sel.value||'').trim();
+}
+function _teamOf(half){ return document.getElementById(`gs-${half}-t`)?.value||''; }
 function refreshBatterySelects(){
   ['top','bot'].forEach(half=>{
     const pl=getTeamPlayers(half);
-    // datalist更新
-    const dl=document.getElementById(`dl-${half}-players`);
-    if(dl) dl.innerHTML=pl.map(p=>`<option value="${p.name}">`).join('');
+    const same=_teamOf(half)===(G[half+'Team']||'');
+    [['p','Pitcher'],['c','Catcher']].forEach(([k,f])=>{
+      const w=document.getElementById(`gs-${half}-${k}-w`); if(!w) return;
+      const prev=document.getElementById(`gs-${half}-${k}`) && w.dataset.team===_teamOf(half) ? _pickVal(`gs-${half}-${k}`) : null;
+      const cur=prev!=null?prev:(same?G[half+f]:'');
+      w.dataset.team=_teamOf(half);
+      w.innerHTML=_pickerHTML(`gs-${half}-${k}`, pl, cur, k, `_armAuto('${half}','${k}')`);
+      _pickerInit(w);
+    });
   });
+}
+/* 投手・捕手を選んだら利き腕を反映 */
+function _armAuto(half,k){
+  const p=getTeamPlayers(half).find(x=>x.name===_pickVal(`gs-${half}-${k}`));
+  const a=document.getElementById(`gs-${half}-${k}arm`);
+  if(p&&a&&(p.arm==='右'||p.arm==='左')) a.value=p.arm;
 }
 
 function buildLineupGrid(half){
   const wrap=document.getElementById(`lu-${half}`);if(!wrap)return;
   const pl=getTeamPlayers(half);
-
-  // datalist更新（打順用）
-  const dlId=`dl-lu-${half}`;
-  let dl=document.getElementById(dlId);
-  if(!dl){ dl=document.createElement('datalist'); dl.id=dlId; document.body.appendChild(dl); }
-  dl.innerHTML=pl.map(p=>`<option value="${p.name}">`).join('');
-
+  const team=_teamOf(half);
+  // 同じチームのまま作り直すときは画面上の選択を残す
+  const keep = wrap.dataset.team===team && document.getElementById(`lu-${half}-0`);
+  const same = team===(G[half+'Team']||'');
+  const curs=[];
+  for(let i=0;i<9;i++){
+    if(keep) curs.push({name:_pickVal(`lu-${half}-${i}`),
+      hand:document.getElementById(`lu-${half}-${i}-hand`)?.value||'右',
+      pos:document.getElementById(`lu-${half}-${i}-pos`)?.value||''});
+    else curs.push(same?(G.lineup[half][i]||{name:'',hand:'右',pos:''}):{name:'',hand:'右',pos:''});
+  }
+  wrap.dataset.team=team;
   wrap.innerHTML='';
   for(let i=0;i<9;i++){
-    const cur=G.lineup[half][i]||{name:'',hand:'右',pos:''};
+    const cur=curs[i];
     const div=document.createElement('div');
     div.className='lu-item';
     div.innerHTML=`
       <div class="lu-num">${i+1}番</div>
-      <input id="lu-${half}-${i}" list="${dlId}"
-        placeholder="名前を入力" autocomplete="off"
-        style="font-size:11px;padding:4px 5px;width:100%;"
-        oninput="luAutoFill('${half}',${i})">
+      ${_pickerHTML(`lu-${half}-${i}`, pl, cur.name, 'f', `luAutoFill('${half}',${i})`)}
       <div style="display:flex;gap:3px;margin-top:2px;">
         <select id="lu-${half}-${i}-hand" style="flex:1;font-size:10px;padding:3px 3px;">
-          <option value="右" ${cur.hand==='右'?'selected':''}>右</option>
-          <option value="左" ${cur.hand==='左'?'selected':''}>左</option>
-          <option value="両" ${cur.hand==='両'?'selected':''}>両</option>
+          <option value="右">右</option><option value="左">左</option><option value="両">両</option>
         </select>
         <select id="lu-${half}-${i}-pos" style="flex:1;font-size:10px;padding:3px 2px;">
           ${POS_OPTS}
         </select>
       </div>`;
     wrap.appendChild(div);
-    setTimeout(()=>{
-      const ni=document.getElementById(`lu-${half}-${i}`);
-      if(ni&&cur.name) ni.value=cur.name;
-      const hs=document.getElementById(`lu-${half}-${i}-hand`);
-      if(hs&&cur.hand) hs.value=cur.hand;
-      const ps=document.getElementById(`lu-${half}-${i}-pos`);
-      if(ps&&cur.pos) ps.value=cur.pos;
-    },0);
+    _pickerInit(div);
+    document.getElementById(`lu-${half}-${i}-hand`).value=cur.hand||'右';
+    document.getElementById(`lu-${half}-${i}-pos`).value=cur.pos||'';
   }
 }
 
 /* 名前入力 → 打席・ポジション自動反映（datalist選択 or 完全一致時のみ） */
+/* 選手を選んだら打席（左右）・守備位置を自動反映 */
 function luAutoFill(half,idx){
-  const inp=document.getElementById(`lu-${half}-${idx}`);
-  if(!inp) return;
-  const name=inp.value.trim();
+  const name=_pickVal(`lu-${half}-${idx}`);
   if(!name) return;
-  const pl=getTeamPlayers(half);
-  const p=pl.find(x=>x.name===name);
-  if(!p) return; // 候補に完全一致しない手入力中は反映しない
+  const p=getTeamPlayers(half).find(x=>x.name===name);
+  if(!p) return;
   const hs=document.getElementById(`lu-${half}-${idx}-hand`);
   if(hs && p.arm) hs.value=p.arm;
   const ps=document.getElementById(`lu-${half}-${idx}-pos`);
@@ -3351,17 +3438,17 @@ function startGame(){
   G.umpire  =document.getElementById('gs-umpire').value||'';
   G.topTeam =document.getElementById('gs-top-t').value||'';
   G.botTeam =document.getElementById('gs-bot-t').value||'';
-  G.topPitcher   =(document.getElementById('gs-top-p').value||'').trim();
+  G.topPitcher   =_pickVal('gs-top-p');
   G.topPitcherArm=document.getElementById('gs-top-parm').value;
-  G.topCatcher   =(document.getElementById('gs-top-c').value||'').trim();
+  G.topCatcher   =_pickVal('gs-top-c');
   G.topCatcherArm=document.getElementById('gs-top-carm').value;
-  G.botPitcher   =(document.getElementById('gs-bot-p').value||'').trim();
+  G.botPitcher   =_pickVal('gs-bot-p');
   G.botPitcherArm=document.getElementById('gs-bot-parm').value;
-  G.botCatcher   =(document.getElementById('gs-bot-c').value||'').trim();
+  G.botCatcher   =_pickVal('gs-bot-c');
   G.botCatcherArm=document.getElementById('gs-bot-carm').value;
   ['top','bot'].forEach(h=>{
     for(let i=0;i<9;i++){
-      const n=(document.getElementById(`lu-${h}-${i}`)?.value||'').trim();
+      const n=_pickVal(`lu-${h}-${i}`);
       const hd=document.getElementById(`lu-${h}-${i}-hand`)?.value||'右';
       const p=document.getElementById(`lu-${h}-${i}-pos`)?.value||'';
       G.lineup[h][i]={name:n,hand:hd,pos:p};
@@ -3761,7 +3848,9 @@ function exportPlayers(){
   const ts    = new Date().toISOString().slice(0,10).replace(/-/g,'');
   const json  = JSON.stringify(pl, null, 2);
   const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-  if(isIOS){
+  if(_DLNS){
+    saveFileOut(`baseball_players_${ts}.json`, new Blob([json],{type:'application/json'}));
+  } else if(isIOS){
     try {
       const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
       const a = document.createElement('a');
@@ -3967,6 +4056,20 @@ function setSubT(t){
     sideSel.value=(tabChanged||!prev)?pk:prev;
   }
   const side=sideSel?sideSel.value:pk;
+  // ★新選手の候補は該当チームの選手だけ
+  const tgt = t==='pitcher' ? pk : (t==='fielder'||t==='defchg') ? side : h;
+  const tPl = (LP()[G[tgt+'Team']]||[]);
+  const ns=document.getElementById('sub-new-sel');
+  if(ns){
+    const onField=new Set([...(G.lineup[tgt]||[]).map(p=>p.name), G[tgt+'Pitcher']].filter(Boolean));
+    const avail=tPl.filter(p=>!onField.has(p.name));
+    const sorted = t==='pitcher' ? [...avail.filter(p=>p.pos==='投手'),...avail.filter(p=>p.pos!=='投手')] : avail;
+    ns.innerHTML='<option value="（直接入力）">（下に直接入力）</option>'+sorted.map(p=>
+      `<option value="${esc(p.name)}">${esc(p.name)}${p.pos?'（'+esc(String(p.pos).replace(/手$/,''))+'）':''}${p.arm&&p.arm!=='右'?' '+esc(p.arm):''}</option>`).join('');
+    ns.onchange=()=>{ const pp=tPl.find(x=>x.name===ns.value); if(pp){
+      const hd=document.getElementById('sub-hand'); if(hd&&pp.arm) hd.value=pp.arm;
+      const am=document.getElementById('sub-arm'); if(am&&(pp.arm==='右'||pp.arm==='左')) am.value=pp.arm; } };
+  }
   const orderSel=document.getElementById('sub-order');
   const orderLbl=orderSel.previousElementSibling;
   const posSel=document.getElementById('sub-pos');
@@ -4362,9 +4465,7 @@ function exportCSV(){
     return row.map(f).join(',');
   });
   const csv=[H.map(f).join(','),...rows].join('\r\n');
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
-  a.download=`baseball_${G.date||'data'}_${G.gameNo||''}.csv`;a.click();
+  saveFileOut(`baseball_${G.date||'data'}_${G.gameNo||''}.csv`, new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
   toast(`✅ ${history.length}件をCSV出力`);
 }
 
@@ -4499,12 +4600,7 @@ function _buildWorkbook(games){
 function _downloadWb(wb, fname){
   // iOS Safari対応: writeFile の代わりに Blob + a.click()
   const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-  const blob  = new Blob([wbout], {type:'application/octet-stream'});
-  const url   = URL.createObjectURL(blob);
-  const a     = document.createElement('a');
-  a.href=url; a.download=fname;
-  document.body.appendChild(a); a.click();
-  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  return saveFileOut(fname, new Blob([wbout], {type:'application/octet-stream'}));
 }
 function exportXLSX(){
   if(!history.length){toast('データがありません');return;}
@@ -5000,7 +5096,9 @@ function init(){
     } catch(e) {}
   }
 
-  // それでも空なら初期チームを作成
+  // ★R8名簿を一度だけ自動登録（既に登録してある選手は変更しない）
+  if (!_LS.get(_ROSTER_FLAG)) { try { mergeRosterR8(); } catch(e) { console.warn(e); } }
+  pl = LP();
   if (!Object.keys(pl).length) {
     TEAMS_DEF.forEach(t => { pl[t] = []; });
     SP(pl);
