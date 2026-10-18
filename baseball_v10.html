@@ -2,11 +2,15 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>野球詳細データ記録システム v10.0</title>
 <style>
+:root{color-scheme:dark;}
 /* ===== VARIABLES ===== */
 :root{
   --bg:#0e1018;--bg2:#141828;--bg3:#1a1e2e;--bg4:#20263a;--bg5:#252d42;
@@ -432,8 +436,8 @@ tr:nth-child(even) td{background:#0e1220;}
   );
 })();
 </script>
-</head>
-<body>
+
+
 <div id="app">
 
 <!-- ==================== HEADER ==================== -->
@@ -774,7 +778,7 @@ tr:nth-child(even) td{background:#0e1220;}
   <div class="vscroll">
     <div class="sec">
       <div class="sec-t">📋 R8リーグ名簿</div>
-      <div class="fs11 txt-m" style="margin-bottom:8px;line-height:1.6;">6大学・165名（名前・守備位置）を登録します。登録済みの選手は変更しません。
+      <div class="fs11 txt-m" style="margin-bottom:8px;line-height:1.6;">6大学・165名（名前・守備位置）＋福岡大の追加36名を登録します。登録済みの選手は変更しません。
         打席の左右はスタメンに出た選手だけ反映済みです（それ以外は「右」）。違う選手は下の「選手一覧・編集」で直してください。</div>
       <button class="mbtn mbtn-g mbtn-full" style="padding:9px;" onclick="mergeRosterR8Btn()">📋 R8名簿を登録</button>
     </div>
@@ -1254,13 +1258,14 @@ async function saveFileOut(fname, blob){
     try{ await _DLNS.save({filename:fname, data:blob}); return true; }
     catch(e){
       if(e && e.code==='declined') { try{ toast('保存をキャンセルしました'); }catch(_){} return false; }
-      try{ toast('⚠ 保存できませんでした: '+(e&&e.message||e&&e.code||e), 5000); }catch(_){}
+      // 組織外の人・ログインしていない人など、Claude経由で保存できないときはログイン不要の保存画面へ
+      _exportFallback(fname, blob);
       return false;
     }
   }
   if(_IN_FRAME){
-    // claude.ai の公開ページでは、ログインしていない人はファイルを保存できない
-    try{ toast('⚠ このページではClaudeにログインしないとファイルを保存できません。チームで共有しているアプリのURL（またはHTMLファイル）から保存してください。記録はこの端末に残っています。', 9000); }catch(_){}
+    // claude.ai の公開ページでログインしていない人：直接は保存できないので、ログイン不要の保存画面を出す
+    _exportFallback(fname, blob);
     return false;
   }
   const url=URL.createObjectURL(blob);
@@ -1268,6 +1273,90 @@ async function saveFileOut(fname, blob){
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 1500);
   return true;
+}
+/* ログイン不要の保存画面：共有シート／新しいタブ／コピー＆貼り付け */
+let _fbUrl=null;
+async function _exportFallback(fname, blob){
+  let ov=document.getElementById('modal-export-fb');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='modal-export-fb'; ov.className='overlay';
+    ov.innerHTML=`<div class="modal">
+      <button class="mclose" onclick="closeModal('modal-export-fb')">✕</button>
+      <div class="mtitle">📄 ファイルを保存（ログイン不要）</div>
+      <div class="fs11 txt-m" style="line-height:1.7;margin-bottom:10px;">
+        このページではファイルを直接ダウンロードできないため、下のどれかの方法で保存してください。</div>
+      <div id="xfb-name" class="fs11" style="color:var(--text);font-weight:700;margin-bottom:8px;word-break:break-all;"></div>
+      <button id="xfb-share" class="mbtn mbtn-g mbtn-full" style="padding:10px;margin-bottom:6px;display:none;">📤 共有して保存（「ファイルに保存」など）</button>
+      <a id="xfb-open" class="mbtn mbtn-b mbtn-full" target="_blank" rel="noopener"
+        style="display:block;text-align:center;text-decoration:none;padding:10px;margin-bottom:10px;">🔗 新しいタブで開いて保存</a>
+      <div class="sep"></div>
+      <div class="fs11 txt-m" style="line-height:1.7;margin:6px 0;">うまくいかないとき：「コピー」を押して、Excel・Numbers・Googleスプレッドシートの
+        A1セルに貼り付けると表になります（メモ帳などにも貼れます）。</div>
+      <div id="xfb-texts"></div>
+      <button class="mbtn mbtn-gr mbtn-full" style="margin-top:6px;" onclick="closeModal('modal-export-fb')">閉じる</button>
+    </div>`;
+    ov.addEventListener('mousedown',e=>{ if(e.target===ov) ov.classList.remove('open'); });
+    document.body.appendChild(ov);
+  }
+  document.getElementById('xfb-name').textContent='ファイル名：'+fname;
+  // 新しいタブで開く
+  if(_fbUrl) URL.revokeObjectURL(_fbUrl);
+  _fbUrl=URL.createObjectURL(blob);
+  const op=document.getElementById('xfb-open');
+  op.href=_fbUrl; op.setAttribute('download', fname);
+  // 共有シート（iPhoneなど。使えない環境ではボタンを出さない）
+  const sh=document.getElementById('xfb-share');
+  let file=null;
+  try{ file=new File([blob], fname, {type:blob.type||'application/octet-stream'}); }catch(e){}
+  const canShare = !!(file && navigator.canShare && navigator.share && (()=>{ try{ return navigator.canShare({files:[file]}); }catch(e){ return false; } })());
+  sh.style.display = canShare ? '' : 'none';
+  sh.onclick = async ()=>{
+    try{ await navigator.share({files:[file], title:fname}); }
+    catch(e){ if(e && e.name!=='AbortError') toast('⚠ 共有できませんでした。下の方法をお試しください', 4000); }
+  };
+  // コピー用テキスト（表はタブ区切りにして表計算ソフトにそのまま貼れるようにする）
+  const box=document.getElementById('xfb-texts');
+  box.innerHTML='<div class="fs11 txt-m tc" style="padding:8px;">準備中...</div>';
+  openModal('modal-export-fb');
+  const parts=[];
+  try{
+    const ext=(fname.split('.').pop()||'').toLowerCase();
+    if((ext==='xlsx'||ext==='csv') && typeof XLSX!=='undefined'){
+      const wb = ext==='xlsx'
+        ? XLSX.read(new Uint8Array(await blob.arrayBuffer()), {type:'array'})
+        : XLSX.read((await blob.text()).replace(/^﻿/,''), {type:'string', raw:true});
+      wb.SheetNames.forEach(n=>parts.push({label: ext==='xlsx' ? `シート「${n}」` : '表', text: XLSX.utils.sheet_to_csv(wb.Sheets[n], {FS:'\t'})}));
+    } else {
+      parts.push({label:'内容', text:(await blob.text()).replace(/^﻿/,'')});
+    }
+  }catch(e){
+    box.innerHTML=`<div class="bx-warn">⚠ コピー用テキストを作れませんでした: ${esc(e.message)}</div>`;
+    return;
+  }
+  box.innerHTML='';
+  parts.forEach(p=>{
+    const w=document.createElement('div');
+    w.style.cssText='margin-bottom:10px;';
+    w.innerHTML=`<div class="row" style="align-items:center;margin-bottom:4px;">
+        <span class="fs11 fw7" style="flex:1;color:var(--green);"></span>
+        <button class="mbtn mbtn-b" style="padding:5px 12px;font-size:12px;">📋 コピー</button></div>
+      <textarea readonly style="width:100%;height:90px;font-size:10px;font-family:monospace;background:var(--inp);color:var(--text);
+        border:1px solid var(--border);border-radius:6px;padding:6px;user-select:text;-webkit-user-select:text;white-space:pre;"></textarea>`;
+    w.querySelector('span').textContent=p.label;
+    const ta=w.querySelector('textarea'); ta.value=p.text;
+    w.querySelector('button').onclick=()=>_fbCopy(ta);
+    box.appendChild(w);
+  });
+}
+async function _fbCopy(ta){
+  try{ await navigator.clipboard.writeText(ta.value); toast('📋 コピーしました'); return; }catch(e){}
+  try{
+    ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+    if(document.execCommand('copy')){ toast('📋 コピーしました'); return; }
+  }catch(e){}
+  ta.focus(); ta.select();
+  toast('⚠ 自動コピーできませんでした。選択された文字を長押しして「コピー」してください', 5000);
 }
 /* 公開ページでは確認ダイアログが出ないので「同じボタンをもう一度押すと実行」にする */
 if(_IN_FRAME){
@@ -1581,20 +1670,27 @@ const BBStats = (() => {
 /* ★R8 名簿（成績集計表R8から登録。打席の左右はスタメン表から反映。スタメンに出ていない選手は「右」で仮登録） */
 const _HAND_FLAG = 'bbr_roster_r8_hand_v1';
 const ROSTER_R8 = {"福岡大":[{"name":"古賀","arm":"右","pos":"三塁手","posType":"f"},{"name":"松西","arm":"左","pos":"左翼手","posType":"f"},{"name":"和田","arm":"右","pos":"投手","posType":"p"},{"name":"秋元","arm":"右","pos":"左翼手","posType":"f"},{"name":"大道蓮","arm":"左","pos":"二塁手","posType":"f"},{"name":"鶴田","arm":"右","pos":"一塁手","posType":"f"},{"name":"益野","arm":"左","pos":"三塁手","posType":"f"},{"name":"岡本","arm":"右","pos":"捕手","posType":"f"},{"name":"日髙","arm":"左","pos":"左翼手","posType":"f"},{"name":"黒石","arm":"右","pos":"左翼手","posType":"f"},{"name":"岩屋","arm":"右","pos":"左翼手","posType":"f"},{"name":"野田","arm":"右","pos":"二塁手","posType":"f"},{"name":"江藤","arm":"右","pos":"遊撃手","posType":"f"},{"name":"永田","arm":"右","pos":"左翼手","posType":"f"},{"name":"森廣","arm":"右","pos":"投手","posType":"p"},{"name":"多田野","arm":"右","pos":"","posType":"f"},{"name":"中村","arm":"右","pos":"一塁手","posType":"f"},{"name":"村上","arm":"右","pos":"捕手","posType":"f"},{"name":"立川","arm":"右","pos":"左翼手","posType":"f"},{"name":"益崎","arm":"右","pos":"投手","posType":"p"},{"name":"大上","arm":"右","pos":"投手","posType":"p"},{"name":"沼","arm":"右","pos":"投手","posType":"p"},{"name":"木村","arm":"右","pos":"投手","posType":"p"},{"name":"小林","arm":"右","pos":"投手","posType":"p"},{"name":"楠井","arm":"右","pos":"投手","posType":"p"},{"name":"堂満","arm":"右","pos":"投手","posType":"p"},{"name":"升田","arm":"右","pos":"投手","posType":"p"}],"久留米":[{"name":"大坂","arm":"左","pos":"左翼手","posType":"f"},{"name":"杉村","arm":"右","pos":"左翼手","posType":"f"},{"name":"寺原","arm":"左","pos":"左翼手","posType":"f"},{"name":"内村","arm":"右","pos":"三塁手","posType":"f"},{"name":"西岡晃","arm":"右","pos":"一塁手","posType":"f"},{"name":"西村","arm":"右","pos":"","posType":"f"},{"name":"森竹","arm":"右","pos":"捕手","posType":"f"},{"name":"大場","arm":"右","pos":"二塁手","posType":"f"},{"name":"木村","arm":"右","pos":"投手","posType":"p"},{"name":"在津","arm":"右","pos":"遊撃手","posType":"f"},{"name":"伊藤","arm":"右","pos":"一塁手","posType":"f"},{"name":"江藤","arm":"右","pos":"遊撃手","posType":"f"},{"name":"瓜生","arm":"右","pos":"","posType":"f"},{"name":"吉岡","arm":"左","pos":"投手","posType":"p"},{"name":"安武","arm":"右","pos":"一塁手","posType":"f"},{"name":"堤","arm":"右","pos":"左翼手","posType":"f"},{"name":"楠林","arm":"右","pos":"投手","posType":"p"},{"name":"緒方","arm":"右","pos":"","posType":"f"},{"name":"重","arm":"右","pos":"投手","posType":"p"},{"name":"原野","arm":"左","pos":"遊撃手","posType":"f"},{"name":"蔵元","arm":"右","pos":"","posType":"f"},{"name":"小原","arm":"右","pos":"捕手","posType":"f"},{"name":"橋本","arm":"右","pos":"投手","posType":"p"},{"name":"江下","arm":"右","pos":"投手","posType":"p"},{"name":"北田","arm":"右","pos":"投手","posType":"p"},{"name":"清水","arm":"右","pos":"投手","posType":"p"},{"name":"秋元","arm":"右","pos":"投手","posType":"p"},{"name":"山川","arm":"右","pos":"投手","posType":"p"}],"九国大":[{"name":"園田","arm":"左","pos":"二塁手","posType":"f"},{"name":"久保","arm":"右","pos":"三塁手","posType":"f"},{"name":"金城","arm":"左","pos":"遊撃手","posType":"f"},{"name":"米崎","arm":"右","pos":"三塁手","posType":"f"},{"name":"倉橋","arm":"左","pos":"左翼手","posType":"f"},{"name":"一ノ瀬","arm":"右","pos":"捕手","posType":"f"},{"name":"杉村","arm":"右","pos":"投手","posType":"p"},{"name":"白元","arm":"右","pos":"投手","posType":"p"},{"name":"稲嶺","arm":"左","pos":"一塁手","posType":"f"},{"name":"林空","arm":"左","pos":"左翼手","posType":"f"},{"name":"石橋叶","arm":"右","pos":"左翼手","posType":"f"},{"name":"入田","arm":"左","pos":"左翼手","posType":"f"},{"name":"菱岡","arm":"左","pos":"三塁手","posType":"f"},{"name":"兒島","arm":"右","pos":"","posType":"f"},{"name":"嘉味田","arm":"右","pos":"左翼手","posType":"f"},{"name":"佐藤","arm":"右","pos":"投手","posType":"p"},{"name":"吉田空","arm":"右","pos":"左翼手","posType":"f"},{"name":"平田","arm":"右","pos":"三塁手","posType":"f"},{"name":"福島","arm":"右","pos":"投手","posType":"p"},{"name":"山口","arm":"右","pos":"投手","posType":"p"},{"name":"金岡","arm":"右","pos":"投手","posType":"p"},{"name":"氏原","arm":"右","pos":"投手","posType":"p"},{"name":"堀切","arm":"右","pos":"投手","posType":"p"},{"name":"原田","arm":"右","pos":"投手","posType":"p"},{"name":"遠矢","arm":"右","pos":"投手","posType":"p"},{"name":"松元白","arm":"右","pos":"投手","posType":"p"}],"北九大":[{"name":"古謝","arm":"左","pos":"一塁手","posType":"f"},{"name":"川内","arm":"右","pos":"一塁手","posType":"f"},{"name":"竹下","arm":"左","pos":"左翼手","posType":"f"},{"name":"木下蓮","arm":"右","pos":"左翼手","posType":"f"},{"name":"黒田","arm":"右","pos":"左翼手","posType":"f"},{"name":"成尾","arm":"右","pos":"三塁手","posType":"f"},{"name":"中尾","arm":"右","pos":"左翼手","posType":"f"},{"name":"渡邉","arm":"右","pos":"左翼手","posType":"f"},{"name":"小畑","arm":"右","pos":"投手","posType":"p"},{"name":"本田","arm":"右","pos":"投手","posType":"p"},{"name":"永田","arm":"左","pos":"遊撃手","posType":"f"},{"name":"福田","arm":"右","pos":"捕手","posType":"f"},{"name":"田中悠","arm":"右","pos":"投手","posType":"p"},{"name":"五味","arm":"右","pos":"","posType":"f"},{"name":"湯浅","arm":"右","pos":"捕手","posType":"f"},{"name":"信國","arm":"左","pos":"二塁手","posType":"f"},{"name":"牧","arm":"右","pos":"二塁手","posType":"f"},{"name":"志垣","arm":"右","pos":"遊撃手","posType":"f"},{"name":"松尾","arm":"右","pos":"","posType":"f"},{"name":"松延","arm":"右","pos":"投手","posType":"p"},{"name":"髙山","arm":"右","pos":"投手","posType":"p"},{"name":"幸野","arm":"右","pos":"投手","posType":"p"},{"name":"加茂","arm":"右","pos":"投手","posType":"p"},{"name":"山下薫","arm":"右","pos":"投手","posType":"p"},{"name":"宮原","arm":"右","pos":"投手","posType":"p"},{"name":"吉松","arm":"右","pos":"投手","posType":"p"},{"name":"大石","arm":"右","pos":"投手","posType":"p"},{"name":"木下諒","arm":"右","pos":"投手","posType":"p"}],"西南大":[{"name":"矢野","arm":"右","pos":"左翼手","posType":"f"},{"name":"小嶋","arm":"右","pos":"遊撃手","posType":"f"},{"name":"喜多","arm":"右","pos":"二塁手","posType":"f"},{"name":"佐藤輝","arm":"右","pos":"三塁手","posType":"f"},{"name":"山中","arm":"左","pos":"左翼手","posType":"f"},{"name":"重松","arm":"右","pos":"投手","posType":"p"},{"name":"上野裕","arm":"左","pos":"投手","posType":"p"},{"name":"田中康","arm":"右","pos":"一塁手","posType":"f"},{"name":"青柳","arm":"右","pos":"捕手","posType":"f"},{"name":"荒下","arm":"右","pos":"投手","posType":"p"},{"name":"今中","arm":"右","pos":"二塁手","posType":"f"},{"name":"有本","arm":"左","pos":"左翼手","posType":"f"},{"name":"入井","arm":"右","pos":"投手","posType":"p"},{"name":"山本善","arm":"右","pos":"","posType":"f"},{"name":"髙田","arm":"右","pos":"左翼手","posType":"f"},{"name":"平田","arm":"右","pos":"一塁手","posType":"f"},{"name":"松本","arm":"右","pos":"捕手","posType":"f"},{"name":"貞松","arm":"右","pos":"左翼手","posType":"f"},{"name":"松岡","arm":"右","pos":"二塁手","posType":"f"},{"name":"秋元","arm":"右","pos":"","posType":"f"},{"name":"山本煌","arm":"右","pos":"一塁手","posType":"f"},{"name":"多田野","arm":"右","pos":"一塁手","posType":"f"},{"name":"三浦","arm":"右","pos":"","posType":"f"},{"name":"津田","arm":"右","pos":"投手","posType":"p"},{"name":"中村","arm":"右","pos":"投手","posType":"p"},{"name":"柳原","arm":"右","pos":"投手","posType":"p"},{"name":"小金丸","arm":"右","pos":"投手","posType":"p"},{"name":"沖田","arm":"右","pos":"投手","posType":"p"},{"name":"坂口","arm":"右","pos":"投手","posType":"p"},{"name":"溝部","arm":"右","pos":"投手","posType":"p"},{"name":"梶原","arm":"右","pos":"投手","posType":"p"},{"name":"石原","arm":"右","pos":"投手","posType":"p"},{"name":"松永","arm":"右","pos":"投手","posType":"p"}],"九州大":[{"name":"堺","arm":"右","pos":"左翼手","posType":"f"},{"name":"岡本","arm":"左","pos":"左翼手","posType":"f"},{"name":"満岡","arm":"右","pos":"一塁手","posType":"f"},{"name":"堀内","arm":"右","pos":"遊撃手","posType":"f"},{"name":"西澤","arm":"左","pos":"左翼手","posType":"f"},{"name":"藤木謙","arm":"右","pos":"捕手","posType":"f"},{"name":"始関","arm":"右","pos":"三塁手","posType":"f"},{"name":"大渕","arm":"両","pos":"二塁手","posType":"f"},{"name":"尾國","arm":"右","pos":"二塁手","posType":"f"},{"name":"宮口","arm":"右","pos":"二塁手","posType":"f"},{"name":"新井","arm":"右","pos":"投手","posType":"p"},{"name":"石井","arm":"右","pos":"二塁手","posType":"f"},{"name":"細江","arm":"右","pos":"左翼手","posType":"f"},{"name":"中山","arm":"右","pos":"","posType":"f"},{"name":"真井","arm":"右","pos":"","posType":"f"},{"name":"寺内","arm":"右","pos":"捕手","posType":"f"},{"name":"吉原","arm":"右","pos":"投手","posType":"p"},{"name":"冨岡","arm":"右","pos":"投手","posType":"p"},{"name":"山西","arm":"右","pos":"投手","posType":"p"},{"name":"奥野","arm":"右","pos":"投手","posType":"p"},{"name":"澤岻","arm":"右","pos":"投手","posType":"p"},{"name":"津野","arm":"右","pos":"投手","posType":"p"},{"name":"楡井","arm":"右","pos":"投手","posType":"p"}]};
+const _ROSTER_FLAG_R8 = 'bbr_roster_r8_v1';
+/* ★福岡大 追加登録（2026-10-18 打順表より） */
+const ROSTER_ADD_FUK1 = {"福岡大":[{"name":"門林","arm":"右","pos":"遊撃手","posType":"f"},{"name":"溝口","arm":"右","pos":"遊撃手","posType":"f"},{"name":"桑畑","arm":"右","pos":"中堅手","posType":"f"},{"name":"武藤","arm":"右","pos":"捕手","posType":"f"},{"name":"松尾","arm":"右","pos":"捕手","posType":"f"},{"name":"中隠居","arm":"右","pos":"一塁手","posType":"f"},{"name":"岩永秀","arm":"右","pos":"DH","posType":"f"},{"name":"一山","arm":"右","pos":"DH","posType":"f"},{"name":"服部","arm":"右","pos":"左翼手","posType":"f"},{"name":"赤城","arm":"右","pos":"左翼手","posType":"f"},{"name":"山口","arm":"右","pos":"三塁手","posType":"f"},{"name":"横山","arm":"右","pos":"右翼手","posType":"f"},{"name":"小川","arm":"右","pos":"右翼手","posType":"f"},{"name":"永仮","arm":"右","pos":"二塁手","posType":"f"},{"name":"宮崎","arm":"右","pos":"右翼手","posType":"f"},{"name":"前田","arm":"右","pos":"中堅手","posType":"f"},{"name":"児玉","arm":"右","pos":"一塁手","posType":"f"},{"name":"星川","arm":"右","pos":"左翼手","posType":"f"},{"name":"鴫山","arm":"右","pos":"左翼手","posType":"f"},{"name":"樽美","arm":"右","pos":"遊撃手","posType":"f"},{"name":"今津","arm":"右","pos":"遊撃手","posType":"f"},{"name":"井村","arm":"右","pos":"捕手","posType":"f"},{"name":"松村","arm":"右","pos":"捕手","posType":"f"},{"name":"徳永","arm":"右","pos":"投手","posType":"p"},{"name":"森","arm":"右","pos":"三塁手","posType":"f"},{"name":"山田","arm":"右","pos":"三塁手","posType":"f"},{"name":"吉田","arm":"右","pos":"二塁手","posType":"f"},{"name":"井上幸","arm":"右","pos":"投手","posType":"p"},{"name":"神宮","arm":"右","pos":"投手","posType":"p"},{"name":"井上","arm":"右","pos":"投手","posType":"p"},{"name":"萬久","arm":"右","pos":"投手","posType":"p"},{"name":"大西","arm":"右","pos":"投手","posType":"p"},{"name":"甲佐","arm":"右","pos":"投手","posType":"p"},{"name":"東堂","arm":"右","pos":"投手","posType":"p"},{"name":"長谷川","arm":"右","pos":"投手","posType":"p"},{"name":"坂本","arm":"右","pos":"投手","posType":"p"}]};
+const _ROSTER_SETS = [{data:ROSTER_R8, flag:_ROSTER_FLAG_R8}, {data:ROSTER_ADD_FUK1, flag:'bbr_roster_fuk1_v1'}];
 const TEAMS_DEF = Object.keys(ROSTER_R8);
 const _OLD_DEF_TEAMS = ['九大','久留米大','福大','西南大','九国大','北九大'];
-const _ROSTER_FLAG = 'bbr_roster_r8_v1';
+const _ROSTER_FLAG = _ROSTER_FLAG_R8;
 /* 名簿を選手データに追加（同じ名前の選手はそのまま。空の旧チームは整理） */
-function mergeRosterR8(){
+function mergeRosterR8(onlyNew){
   const pl = LP();
   _OLD_DEF_TEAMS.forEach(t=>{ if(!ROSTER_R8[t] && Array.isArray(pl[t]) && !pl[t].length) delete pl[t]; });
   let added=0;
-  Object.entries(ROSTER_R8).forEach(([team,list])=>{
-    if(!Array.isArray(pl[team])) pl[team]=[];
-    list.forEach(p=>{ if(!pl[team].some(x=>x.name===p.name)){ pl[team].push({...p}); added++; } });
+  _ROSTER_SETS.forEach(set=>{
+    if(onlyNew && _LS.get(set.flag)) return;
+    Object.entries(set.data).forEach(([team,list])=>{
+      if(!Array.isArray(pl[team])) pl[team]=[];
+      list.forEach(p=>{ if(!pl[team].some(x=>x.name===p.name)){ pl[team].push({...p}); added++; } });
+    });
+    try{ _LS.set(set.flag,'1'); }catch(e){}
   });
   SP(pl);
-  try{ _LS.set(_ROSTER_FLAG,'1'); }catch(e){}
   return added;
 }
 function applyRosterHandsR8(){
@@ -1613,7 +1709,7 @@ function mergeRosterR8Btn(){
   const n=mergeRosterR8();
   applyRosterHandsR8();
   initPlayerView();
-  toast(n?`✅ R8名簿から ${n}名を登録しました`:'✅ 名簿の選手はすべて登録済みです');
+  toast(n?`✅ 名簿から ${n}名を登録しました`:'✅ 名簿の選手はすべて登録済みです');
 }
 
 const PITCH_TYPES = ['','直球','スライダー','カーブ','チェンジアップ','フォーク',
@@ -3867,7 +3963,7 @@ function exportPlayers(){
   const ts    = new Date().toISOString().slice(0,10).replace(/-/g,'');
   const json  = JSON.stringify(pl, null, 2);
   const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-  if(_DLNS){
+  if(_DLNS || _IN_FRAME){
     saveFileOut(`baseball_players_${ts}.json`, new Blob([json],{type:'application/json'}));
   } else if(isIOS){
     try {
@@ -5116,7 +5212,7 @@ function init(){
   }
 
   // ★R8名簿を一度だけ自動登録（既に登録してある選手は変更しない）
-  if (!_LS.get(_ROSTER_FLAG)) { try { mergeRosterR8(); } catch(e) { console.warn(e); } }
+  if (_ROSTER_SETS.some(x=>!_LS.get(x.flag))) { try { mergeRosterR8(true); } catch(e) { console.warn(e); } }
   // ★登録済みの名簿に打席の左右を一度だけ反映
   if (!_LS.get(_HAND_FLAG)) { try { applyRosterHandsR8(); } catch(e) { console.warn(e); } }
   pl = LP();
@@ -5338,5 +5434,7 @@ async function startNextGame(){
 
 document.addEventListener('DOMContentLoaded', _syncFromIDB);
 </script>
+
+</body></html>
 </body>
 </html>
