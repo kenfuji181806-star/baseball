@@ -41,7 +41,7 @@ html,body{
 #app{
   display:flex;flex-direction:column;
   width:100%;
-  height:100vh;
+  height:100%;
   overflow:hidden;
 }
 
@@ -322,7 +322,7 @@ tr:nth-child(even) td{background:#0e1220;}
 .overlay.open{display:flex;}
 .modal{background:var(--bg3);border:1px solid var(--border);
   border-radius:12px;padding:16px 18px;
-  max-width:460px;width:94%;max-height:88dvh;overflow-y:auto;}
+  max-width:460px;width:94%;max-height:88vh;max-height:88dvh;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;}
 .modal::-webkit-scrollbar{width:3px;}
 .mtitle{font-size:14px;font-weight:700;color:var(--green);margin-bottom:12px;}
 .mclose{float:right;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;}
@@ -584,23 +584,12 @@ tr:nth-child(even) td{background:#0e1220;}
         <span class="res-group-lbl" style="margin:0;">🏃 走塁イベント（同時記録）</span>
         <button id="baserun-toggle-btn" onclick="toggleBaserunPanel()"
           style="background:var(--bg4);color:var(--muted);border:1px solid var(--border);
-                 border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:inherit;">
+                 border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;">
           ＋ 追加
         </button>
       </div>
-      <!-- 走塁イベント入力エリア（初期非表示） -->
-      <div id="baserun-body" style="display:none;margin-top:6px;
-           background:var(--bg4);border-radius:8px;padding:8px;border:1px solid var(--border);">
-        <div id="baserun-events"></div>
-        <button onclick="addBaserunEvent()"
-          style="width:100%;margin-top:6px;padding:7px;border-radius:6px;
-                 background:var(--bg3);color:var(--muted);border:1px dashed var(--border);
-                 font-size:11px;cursor:pointer;font-family:inherit;">
-          ＋ 走塁イベントを追加
-        </button>
-      </div>
-      <!-- 登録済みイベントのサマリー表示 -->
-      <div id="baserun-summary" style="display:none;margin-top:4px;font-size:11px;
+      <!-- 登録済みイベントのサマリー表示（タップで編集） -->
+      <div id="baserun-summary" onclick="toggleBaserunPanel()" style="display:none;margin-top:4px;font-size:11px;cursor:pointer;
            color:var(--obright);padding:4px 6px;background:var(--bg4);border-radius:5px;
            border-left:3px solid var(--obright);"></div>
     </div>
@@ -1049,6 +1038,29 @@ tr:nth-child(even) td{background:#0e1220;}
     <div id="arc-list" style="max-height:46dvh;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:8px;"></div>
     <button class="mbtn mbtn-g mbtn-full" style="padding:10px;margin-bottom:6px;" onclick="exportArchiveXLSX()">📥 全試合をExcelで出力</button>
     <button class="mbtn mbtn-gr mbtn-full" onclick="closeModal('modal-archive')">閉じる</button>
+  </div>
+</div>
+
+<!-- ==================== MODAL: 走塁イベント（同時記録） ==================== -->
+<div id="modal-baserun" class="overlay">
+  <div class="modal">
+    <button class="mclose" onclick="closeBaserunModal()">✕</button>
+    <div class="mtitle">🏃 走塁イベント（この投球と同時）</div>
+    <div class="fs11 txt-m" style="margin-bottom:10px;line-height:1.6;">盗塁・暴投・捕逸などで、この1球の間に走者が動いたときに入力します。
+      入力したら「完了」を押し、そのあと「投球を確定」で記録されます。</div>
+    <div id="baserun-body" style="background:var(--bg4);border-radius:8px;padding:10px;border:1px solid var(--border);">
+      <div id="baserun-events"></div>
+      <button onclick="addBaserunEvent()"
+        style="width:100%;margin-top:8px;padding:10px;border-radius:6px;
+               background:var(--bg3);color:var(--muted);border:1px dashed var(--border);
+               font-size:13px;cursor:pointer;font-family:inherit;">
+        ＋ 走塁イベントを追加
+      </button>
+    </div>
+    <div class="row" style="gap:8px;margin-top:12px;">
+      <button class="mbtn mbtn-gr" style="flex:1;padding:11px;" onclick="clearBaserunEvents()">すべて削除</button>
+      <button class="mbtn mbtn-g" style="flex:2;padding:11px;font-size:14px;" onclick="closeBaserunModal()">✅ 完了</button>
+    </div>
   </div>
 </div>
 
@@ -3809,17 +3821,14 @@ const BASERUN_OUTCOME = ['成功','死（アウト）'];
 const BASERUN_REASON  = ['盗塁','ワイルドピッチ','パスボール','ボーク','牽制','挟殺','その他'];
 
 function toggleBaserunPanel(){
-  const body = document.getElementById('baserun-body');
-  const btn  = document.getElementById('baserun-toggle-btn');
-  if(!body) return;
-  const open = body.style.display !== 'none';
-  body.style.display = open ? 'none' : '';
-  btn.textContent = open ? '＋ 追加' : '▲ 閉じる';
-  if(!open && document.getElementById('baserun-events').children.length === 0){
-    addBaserunEvent();
-  } else if(!open){
-    _scrollPitchFormTo(body);
-  }
+  // ★入力はポップアップで行う（記録画面の狭いスクロール領域の中で操作しない）
+  if(document.getElementById('baserun-events').children.length === 0) addBaserunEvent();
+  openModal('modal-baserun');
+}
+function closeBaserunModal(){ closeModal('modal-baserun'); updateBaserunSummary(); }
+function clearBaserunEvents(){
+  const w=document.getElementById('baserun-events'); if(w) w.innerHTML='';
+  updateBaserunSummary(); closeModal('modal-baserun');
 }
 
 function addBaserunEvent(){
@@ -3839,7 +3848,7 @@ function addBaserunEvent(){
   row.querySelectorAll('select').forEach(s=>{ s.onchange = updateBaserunSummary; });
   wrap.appendChild(row);
   updateBaserunSummary();
-  _scrollPitchFormTo(row);
+  requestAnimationFrame(()=>{ try{ row.scrollIntoView({block:'nearest'}); }catch(e){} });
 }
 /* 入力欄の中で、指定した要素が見える位置までスクロール（iPhoneでも確実に動くよう再計算させる） */
 function _scrollPitchFormTo(el){
@@ -3872,26 +3881,19 @@ function getBaserunEvents(){
 function updateBaserunSummary(){
   const events = getBaserunEvents();
   const summary = document.getElementById('baserun-summary');
+  const btn = document.getElementById('baserun-toggle-btn');
+  if(btn) btn.textContent = events.length ? `✎ 編集（${events.length}件）` : '＋ 追加';
   if(!summary) return;
-  if(events.length === 0){
-    summary.style.display = 'none';
-    return;
-  }
+  if(events.length === 0){ summary.style.display = 'none'; return; }
   summary.style.display = '';
-  summary.textContent = '🏃 ' + events.map(e=>
-    `${e.from}→${e.to} ${e.outcome}（${e.reason}）`
-  ).join(' / ');
+  summary.textContent = '🏃 ' + events.map(e=>`${e.from}→${e.to} ${e.outcome}（${e.reason}）`).join(' / ') + '　（タップで編集）';
 }
 
 function resetBaserunPanel(){
   const wrap = document.getElementById('baserun-events');
   if(wrap) wrap.innerHTML = '';
-  const body = document.getElementById('baserun-body');
-  if(body) body.style.display = 'none';
-  const btn = document.getElementById('baserun-toggle-btn');
-  if(btn) btn.textContent = '＋ 追加';
-  const summary = document.getElementById('baserun-summary');
-  if(summary) summary.style.display = 'none';
+  closeModal('modal-baserun');
+  updateBaserunSummary();
 }
 /* ============================================================
    GitHub Gist 設定UI
