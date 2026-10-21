@@ -109,12 +109,26 @@ html,body{
 .vscroll::-webkit-scrollbar{width:3px;}
 .vscroll::-webkit-scrollbar-thumb{background:var(--border);}
 
+/* ★ページ全体スクロール方式（iPhone・Claudeアプリ内でも確実にスクロールできるように）
+   画面の中に小さなスクロール領域を入れ子にせず、ページそのものを上下にスクロールさせる */
+html.ps{height:auto;min-height:100%;overflow-x:hidden;overflow-y:auto;}
+html.ps body{height:auto;min-height:100%;overflow:visible;}
+html.ps body{touch-action:pan-y pinch-zoom;}
+html.ps #app{height:auto;min-height:100vh;overflow:visible;}
+html.ps #hdr{position:sticky;top:0;z-index:150;}
+html.ps #scorebar{position:sticky;top:var(--hdr-sticky,var(--hdr-h));z-index:149;}
+html.ps #course-row{position:sticky;top:var(--top-h,82px);z-index:140;background:var(--bg);box-shadow:0 4px 8px rgba(0,0,0,.35);}
+html.ps #main{flex:none;overflow:visible;min-height:0;}
+html.ps .view{position:static;bottom:auto !important;overflow:visible;}
+html.ps .vscroll,html.ps #pitch-form,html.ps #hd-body,html.ps #rp-body{flex:none;overflow:visible;min-height:0;}
+html.ps #hd-body,html.ps #rp-body{padding-bottom:calc(var(--ftr-h) + 40px);}
+
 /* FOOTER */
 #ftr{
   position:fixed;
   bottom:0;left:0;right:0;
   background:#0a0e18;border-top:1px solid var(--border);
-  display:flex;align-items:center;justify-content:center;gap:8px;
+  display:flex;align-items:center;justify-content:center;gap:6px;
   padding:8px 10px;
   box-sizing:border-box;
   z-index:200;
@@ -135,6 +149,11 @@ html,body{
   width:50px;height:46px;border-radius:8px;
   background:#0a2840;color:var(--clight);font-size:10px;font-weight:700;border:none;cursor:pointer;
 }
+#btn-baserun-ftr{
+  width:50px;height:46px;border-radius:8px;flex-shrink:0;
+  background:#2a2410;color:#f0c040;font-size:10px;font-weight:700;border:none;cursor:pointer;line-height:1.25;
+}
+#btn-baserun-ftr.has{background:#6a4a08;color:#fff3c0;box-shadow:0 0 0 2px #f0c040 inset;}
 #btn-sub-ftr{
   width:50px;height:46px;border-radius:8px;
   background:#1e2840;color:#5aabe8;font-size:10px;font-weight:700;border:none;cursor:pointer;
@@ -893,6 +912,7 @@ tr:nth-child(even) td{background:#0e1220;}
   <button id="btn-confirm"     onclick="handleConfirm()">☑ 投球を確定</button>
   <button id="btn-sub-ftr"     onclick="openSubModal()">選手<br>交代</button>
   <button id="btn-runner-move" onclick="openRunnerMoveModal()">走者<br>移動</button>
+  <button id="btn-baserun-ftr" onclick="toggleBaserunPanel()">走塁<br>追加</button>
 </div>
 
 <!-- ==================== MODAL: OneDrive設定 ==================== -->
@@ -2149,6 +2169,7 @@ const saveG = () => {
    ============================================================ */
 const VIDS=['pitch','hitdetail','runnerplace','setup','players','data','box'];
 function showView(id){
+  try{ window.scrollTo(0,0); }catch(e){}
   VIDS.forEach(v=>{
     document.getElementById(`v-${v}`)?.classList.toggle('active',v===id);
   });
@@ -3883,6 +3904,8 @@ function updateBaserunSummary(){
   const summary = document.getElementById('baserun-summary');
   const btn = document.getElementById('baserun-toggle-btn');
   if(btn) btn.textContent = events.length ? `✎ 編集（${events.length}件）` : '＋ 追加';
+  const fb = document.getElementById('btn-baserun-ftr');
+  if(fb){ fb.innerHTML = events.length ? `走塁<br>${events.length}件` : '走塁<br>追加'; fb.classList.toggle('has', events.length>0); }
   if(!summary) return;
   if(events.length === 0){ summary.style.display = 'none'; return; }
   summary.style.display = '';
@@ -5439,9 +5462,22 @@ async function startNextGame(){
 document.addEventListener('DOMContentLoaded', _syncFromIDB);
 /* ★iPhone対策：選択肢を閉じた後などにページ全体がずれて固定されたままになるのを戻す */
 (function(){
-  const fixShift=()=>{ if(window.scrollX||window.scrollY) window.scrollTo(0,0); };
+  // ページ全体スクロール方式に切り替え（横ずれだけ戻す）
+  document.documentElement.classList.add('ps');
+  // コース入力欄を、上のメニュー＋点数バーのすぐ下に固定する位置を計算
+  const setTopH=()=>{ try{
+    const h=document.getElementById('hdr'), sb=document.getElementById('scorebar');
+    const t=(h?h.getBoundingClientRect().height:0)+(sb?sb.getBoundingClientRect().height:0);
+    if(t>0){
+      document.documentElement.style.setProperty('--top-h', Math.round(t)+'px');
+      document.documentElement.style.setProperty('--hdr-sticky', Math.round(h.getBoundingClientRect().height)+'px');
+    }
+  }catch(e){} };
+  window.addEventListener('load',setTopH); window.addEventListener('resize',setTopH);
+  document.addEventListener('DOMContentLoaded',()=>{ setTopH(); setTimeout(setTopH,500); });
+  setTimeout(setTopH,0);
+  const fixShift=()=>{ if(window.scrollX) window.scrollTo(0,window.scrollY); };
   document.addEventListener('focusout', ()=>setTimeout(fixShift,50));
-  if(window.visualViewport) window.visualViewport.addEventListener('resize', ()=>setTimeout(fixShift,50));
   // 入力欄タップ時の自動ズームを止める（ピンチでの拡大はそのまま使える）
   try{
     let m=document.querySelector('meta[name=viewport]');
