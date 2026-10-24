@@ -99,6 +99,13 @@ video{width:100%;max-width:100%;border-radius:8px;background:#000;max-height:60v
 .links a:first-child{border-top:0}
 .links a:hover{background:var(--chip)}
 .links a .num{color:var(--accent)}
+/* ドロップ枠 */
+.drop{border:2px dashed var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;transition:background .15s,border-color .15s}
+.drop .dz-t{font-size:14px;font-weight:600}
+.drop .dz-s{font-size:12px;color:var(--muted)}
+body.dragging .drop{border-color:var(--accent)}
+.drop.over{background:var(--accent-soft);border-color:var(--accent);border-style:solid}
+@media (prefers-reduced-motion: reduce){.drop{transition:none}}
 details summary{cursor:pointer;font-size:14px;font-weight:600}
 details > div{margin-top:8px}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);
@@ -121,9 +128,12 @@ details > div{margin-top:8px}
   <section class="step">
     <div class="step-h"><span class="no">1</span><h2>記録アプリのExcelを読み込む</h2><span class="st" id="st1"></span></div>
     <div class="step-b">
+      <div class="drop" data-drop="xlsx">
+        <div><div class="dz-t">Excelをここにドラッグ＆ドロップ</div><div class="dz-s">保存した作業データ（.json）も落とせます</div></div>
       <div class="row">
         <label class="btn primary">Excelを選ぶ<input type="file" id="fXlsx" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
         <label class="btn">保存した作業データを開く<input type="file" id="fJson" accept=".json,application/json"></label>
+      </div>
       </div>
       <div class="grid2">
         <label class="field" id="gameWrap" hidden>試合
@@ -143,8 +153,11 @@ details > div{margin-top:8px}
   <section class="step">
     <div class="step-h"><span class="no">2</span><h2>打席ごとの動画を選ぶ</h2><span class="st" id="st2"></span></div>
     <div class="step-b">
-      <div class="row">
+      <div class="drop" data-drop="clips">
+        <div><div class="dz-t">動画をここにドラッグ＆ドロップ</div><div class="dz-s">複数まとめて、またはフォルダごと落とせます。あとから落とした分も並び順に合わせて入ります</div></div>
         <label class="btn primary">動画を選ぶ（複数可）<input type="file" id="fClips" accept="video/*,.mov,.mp4,.m4v" multiple></label>
+      </div>
+      <div class="row">
         <label class="field" style="flex-direction:row;align-items:center;gap:8px">並び順
           <select id="selSort">
             <option value="ctime">撮影日時</option>
@@ -227,7 +240,8 @@ details > div{margin-top:8px}
       <details id="verify">
         <summary>結合後の動画で確認・補正</summary>
         <div class="step-b" style="padding:0">
-          <div class="row"><label class="btn">結合した動画を選ぶ<input type="file" id="fJoined" accept="video/*,.mov,.mp4,.m4v"></label><span class="hint" id="joinedInfo"></span></div>
+          <div class="drop" data-drop="joined"><div class="dz-t">結合した動画をここにドラッグ＆ドロップ</div>
+            <div class="row"><label class="btn">結合した動画を選ぶ<input type="file" id="fJoined" accept="video/*,.mov,.mp4,.m4v"></label><span class="hint" id="joinedInfo"></span></div></div>
           <label class="chk" id="scaleWrap" hidden><input type="checkbox" id="oScale">長さの差を各打席に割り振って補正する</label>
           <video id="jv" controls playsinline hidden></video>
           <p class="hint">読み込むと下の一覧の打席をタップした位置から再生します。最初と最後の打席の頭が合っていれば、YouTubeでも同じ位置になります。</p>
@@ -293,8 +307,8 @@ function buildPAs(rows, rowIdx){
 }
 
 /* ================= Excel 読み込み ================= */
-$('fXlsx').addEventListener('change', async e=>{
-  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+$('fXlsx').addEventListener('change', e=>{ const f=e.target.files[0]; e.target.value=''; if(f) loadXlsx(f); });
+async function loadXlsx(f){
   if(typeof XLSX==='undefined'){ toast('Excelの読み込み部品を準備中です。数秒後にもう一度選んでください',4000); return; }
   try{
     const wb=XLSX.read(await f.arrayBuffer(), {type:'array'});
@@ -312,7 +326,7 @@ $('fXlsx').addEventListener('change', async e=>{
     pickGame(0);
     toast(`${f.name} を読み込みました（${S.pas.length}打席）`);
   }catch(err){ console.error(err); toast('Excelを読めませんでした: '+err.message, 5000); }
-});
+}
 $('selGame').addEventListener('change', e=>pickGame(+e.target.value));
 function pickGame(i){
   const g=GAMES[i]; if(!g) return;
@@ -368,8 +382,9 @@ function durByElement(url){
     v.src=url;
   });
 }
-$('fClips').addEventListener('change', async e=>{
-  const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+$('fClips').addEventListener('change', e=>{ const files=[...e.target.files]; e.target.value=''; addClips(files); });
+async function addClips(files){
+  if(!files.length) return;
   if(S.sample){ S.sample=false; S.pas=[]; S.clips=[]; S.meta={}; }
   $('st2').textContent='読み取り中…';
   const add=[];
@@ -388,7 +403,7 @@ $('fClips').addEventListener('change', async e=>{
   render();
   const bad=add.filter(c=>c.noDur).length;
   toast(`${files.length}本の動画を読み込みました`+(bad?`（${bad}本は長さを読めませんでした）`:''), 3500);
-});
+}
 function sortClips(){
   const m=S.opts.sort;
   const coll=new Intl.Collator('ja',{numeric:true});
@@ -630,11 +645,11 @@ function snapshot(){
     pas:S.pas, clips:S.clips.map(({url,...c})=>c)};
 }
 $('btnJson').addEventListener('click', ()=>saveFile(baseName()+'_打席動画.json', new Blob([JSON.stringify(snapshot())],{type:'application/json'})));
-$('fJson').addEventListener('change', async e=>{
-  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+$('fJson').addEventListener('change', e=>{ const f=e.target.files[0]; e.target.value=''; if(f) loadJsonFile(f); });
+async function loadJsonFile(f){
   try{ const d=JSON.parse(await f.text()); if(d.app!=='打席動画チャプター') throw new Error('このツールの作業データではありません'); load(d); toast('作業データを開きました'); }
   catch(err){ toast('開けませんでした: '+err.message, 4500); }
-});
+}
 function load(d){
   WB=null; WB_ROWS=null; GAMES=[]; $('gameWrap').hidden=true;
   S.meta=d.meta||{}; Object.assign(S.opts, d.opts||{}); S.pas=d.pas||[]; S.clips=(d.clips||[]).map(c=>Object.assign({},c)); S.joinedDur=d.joinedDur||null; S.sample=!!d.sample;
@@ -660,8 +675,8 @@ bind('outName','out','input',t=>{ let v=t.value.trim()||'試合動画.mp4'; if(!
 bind('oScale','scale','change',t=>t.checked);
 
 /* 結合後の動画で確認 */
-$('fJoined').addEventListener('change', async e=>{
-  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+$('fJoined').addEventListener('change', e=>{ const f=e.target.files[0]; e.target.value=''; if(f) loadJoined(f); });
+async function loadJoined(f){
   let info=null; try{ info=await parseMovie(f); }catch(err){}
   const url=URL.createObjectURL(f);
   const d=(info&&info.dur)||await durByElement(url);
@@ -673,10 +688,61 @@ $('fJoined').addEventListener('change', async e=>{
   $('joinedInfo').textContent=`長さ ${fmt(d)}（${d.toFixed(1)}秒）・各動画の合計との差 ${diff>=0?'+':''}${diff.toFixed(1)}秒`;
   $('scaleWrap').hidden=Math.abs(diff)<0.5;
   render();
-});
+}
 $('jlinks').addEventListener('click', e=>{
   const a=e.target.closest('a[data-t]'); if(!a) return; e.preventDefault();
   const jv=$('jv'); jv.currentTime=+a.dataset.t; jv.play().catch(()=>{}); jv.scrollIntoView({block:'nearest'});
+});
+
+/* ================= ドラッグ＆ドロップ ================= */
+const isVideo = f => /^video\//.test(f.type) || /\.(mov|mp4|m4v)$/i.test(f.name);
+const isXlsx = f => /\.xlsx?$/i.test(f.name);
+const isJson = f => /\.json$/i.test(f.name);
+// フォルダを落とされた時は中のファイルを全部たどる
+function entryFiles(entry){
+  return new Promise(res=>{
+    if(!entry) return res([]);
+    if(entry.isFile) return entry.file(f=>res([f]), ()=>res([]));
+    if(!entry.isDirectory) return res([]);
+    const rd=entry.createReader(), all=[];
+    const next=()=>rd.readEntries(async ents=>{
+      if(!ents.length){ const nested=await Promise.all(all.map(entryFiles)); return res(nested.flat()); }
+      all.push(...ents); next();
+    }, ()=>res([]));
+    next();
+  });
+}
+async function droppedFiles(dt){
+  const items=[...(dt.items||[])].filter(it=>it.kind==='file');
+  if(items.length && items[0].webkitGetAsEntry){
+    const entries=items.map(it=>it.webkitGetAsEntry());
+    if(entries.some(en=>en&&en.isDirectory)) return (await Promise.all(entries.map(entryFiles))).flat();
+  }
+  return [...(dt.files||[])];
+}
+let dragDepth=0;
+const hasFiles = e => [...(e.dataTransfer&&e.dataTransfer.types||[])].includes('Files');
+window.addEventListener('dragenter', e=>{ if(!hasFiles(e)) return; e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
+window.addEventListener('dragleave', e=>{ if(!hasFiles(e)) return; dragDepth=Math.max(0,dragDepth-1); if(!dragDepth) document.body.classList.remove('dragging'); });
+window.addEventListener('dragover', e=>{
+  if(!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect='copy';
+  const z=e.target.closest && e.target.closest('[data-drop]');
+  document.querySelectorAll('.drop.over').forEach(d=>{ if(d!==z) d.classList.remove('over'); });
+  if(z) z.classList.add('over');
+});
+window.addEventListener('drop', async e=>{
+  if(!hasFiles(e)) return; e.preventDefault();
+  dragDepth=0; document.body.classList.remove('dragging'); document.querySelectorAll('.drop.over').forEach(d=>d.classList.remove('over'));
+  const zone=(e.target.closest && e.target.closest('[data-drop]')||{dataset:{}}).dataset.drop;
+  const files=(await droppedFiles(e.dataTransfer)).filter(f=>!f.name.startsWith('.'));
+  const vids=files.filter(isVideo), x=files.find(isXlsx), j=files.find(isJson);
+  if(!files.length) return;
+  if(zone==='joined'){ if(vids[0]) loadJoined(vids[0]); else toast('動画ファイルを落としてください'); return; }
+  // 枠の外に落とした時も、ファイルの種類で振り分ける
+  if(x) await loadXlsx(x); else if(j) await loadJsonFile(j);
+  if(vids.length) await addClips(vids);
+  if(!x && !j && !vids.length) toast('動画（.mov / .mp4）かExcel（.xlsx）を落としてください', 3500);
+  else if(zone==='clips' && !vids.length) toast('動画ファイルが見つかりませんでした');
 });
 
 /* ================= サンプル ================= */
