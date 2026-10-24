@@ -187,13 +187,14 @@ details > div{margin-top:8px}
 
   <!-- 4 -->
   <section class="step">
-    <div class="step-h"><span class="no">4</span><h2>動画を1本につなぐ</h2><span class="st">Mac（無料のffmpeg）</span></div>
+    <div class="step-h"><span class="no">4</span><h2>動画を1本につなぐ</h2><span class="st">無料のffmpegを使います</span></div>
     <div class="step-b">
-      <ol class="steps">
-        <li>はじめての時だけ：ターミナルで <code>brew install ffmpeg</code> を実行</li>
-        <li>動画を1つのフォルダに入れ、ターミナルで <code>cd␣</code> と打ってからフォルダをドラッグし、Enter</li>
-        <li>下のコマンドをコピーして貼り付け、Enter。フォルダに結合動画ができます</li>
-      </ol>
+      <label class="field" style="flex-direction:row;align-items:center;gap:8px">使うパソコン
+        <select id="selOS">
+          <option value="win">Windows</option>
+          <option value="mac">Mac</option>
+        </select></label>
+      <ol class="steps" id="osSteps"></ol>
       <div class="grid2">
         <label class="field">出力ファイル名<input type="text" id="outName" value="試合動画.mp4"></label>
         <label class="field">つなぎ方
@@ -209,7 +210,7 @@ details > div{margin-top:8px}
       </div>
       <details>
         <summary>iPhone・iPadでつなぐ場合</summary>
-        <div><p class="hint">iMovieなどでつなぐ場合は、3の表と同じ順番で並べ、クリップ間のトランジション（ディゾルブ）を「なし」にしてください。トランジションが入ると、その分だけ時刻がずれます。書き出した動画を5の「結合後の動画で確認」で読み込めば、ずれを補正できます。</p></div>
+        <div><p class="hint">iPhone・iPadのiMovieなどでつなぐ場合は、3の表と同じ順番で並べ、クリップ間のトランジション（ディゾルブ）を「なし」にしてください。トランジションが入ると、その分だけ時刻がずれます。書き出した動画を5の「結合後の動画で確認」で読み込めば、ずれを補正できます。</p></div>
       </details>
     </div>
   </section>
@@ -262,7 +263,7 @@ document.documentElement.lang='ja';
 /* ================= 状態 ================= */
 const S = {
   meta:{}, pas:[], clips:[], sample:false,
-  opts:{half:'all', sort:'ctime', pitcher:true, sit:false, merge:true, offset:0, yt:'', mode:'copy', out:'試合動画.mp4', scale:false},
+  opts:{os:/Mac|iPhone|iPad/.test(navigator.userAgent)?'mac':'win', half:'all', sort:'ctime', pitcher:true, sit:false, merge:true, offset:0, yt:'', mode:'copy', out:'試合動画.mp4', scale:false},
   joinedDur:null,
 };
 let WB=null, WB_ROWS=null, WB_SHEET='', GAMES=[];
@@ -596,18 +597,34 @@ $('pvClose').addEventListener('click', ()=>{ $('pv').pause(); $('pv').removeAttr
 
 /* ================= 出力 ================= */
 function shq(s){ return "'"+String(s).replace(/'/g, "'\\''")+"'"; }
+const OS_STEPS={
+  win:`<li>はじめての時だけ：スタートメニューで「PowerShell」を開き、<code>winget install Gyan.FFmpeg</code> を実行。終わったらPowerShellをいったん閉じます</li>
+    <li>動画を1つのフォルダに入れてエクスプローラーで開き、上のアドレスバーに <code>powershell</code> と入力してEnter（そのフォルダでPowerShellが開きます）</li>
+    <li>下のコマンドをコピーして右クリックで貼り付け、Enter。同じフォルダに結合動画ができます</li>`,
+  mac:`<li>はじめての時だけ：ターミナルで <code>brew install ffmpeg</code> を実行</li>
+    <li>動画を1つのフォルダに入れ、ターミナルで <code>cd␣</code> と打ってからフォルダをドラッグし、Enter</li>
+    <li>下のコマンドをコピーして貼り付け、Enter。フォルダに結合動画ができます</li>`};
+function codecArgs(C){
+  const ts = C.some(c=>isTS(c.name));
+  // MTSの音声(AC-3)はMP4向けにAACへ。変換時はインターレース(1080i)のフレームだけ解除する
+  return S.opts.mode==='enc'
+    ? `${ts?'-vf yadif=deint=interlaced ':''}-c:v libx264 -preset veryfast -crf 20 -c:a aac -b:a 192k`
+    : (ts ? '-c:v copy -c:a aac -b:a 192k' : '-c copy');
+}
 function buildCmd(){
   const C=activeClips();
   if(!C.length) return '# 2 で動画を選ぶと、ここにコマンドが出ます';
+  if(S.opts.os==='win'){
+    // PowerShell: 一覧ファイルはBOMなしUTF-8で書く（WriteAllLines）。'' は PowerShell の ' のエスケープ
+    const pq = v => "'"+String(v).replace(/'/g,"''")+"'";
+    const names = C.map(c=>'  '+pq(c.name)).join(',\n');
+    return `$f = @(\n${names}\n)\n[IO.File]::WriteAllLines("$PWD\\_list.txt", ($f | ForEach-Object { "file '" + $_.Replace("'", "'\\''") + "'" }))\nffmpeg -hide_banner -f concat -safe 0 -i _list.txt ${codecArgs(C)} -movflags +faststart ${pq(S.opts.out||'試合動画.mp4')}`;
+  }
   // concat の一覧ファイル内では ' を '\'' に置き換える必要がある
   const listLine = n => "file '"+n.replace(/'/g, "'\\''")+"'";
   const list = C.map(c=>shq(listLine(c.name))).join(' \\\n  ');
   const out = shq(S.opts.out||'試合動画.mp4');
-  const ts = C.some(c=>isTS(c.name));
-  // MTSの音声(AC-3)はMP4向けにAACへ。変換時はインターレース(1080i)のフレームだけ解除する
-  const codec = S.opts.mode==='enc'
-    ? `${ts?'-vf yadif=deint=interlaced ':''}-c:v libx264 -preset veryfast -crf 20 -c:a aac -b:a 192k`
-    : (ts ? '-c:v copy -c:a aac -b:a 192k' : '-c copy');
+  const codec = codecArgs(C);
   return `printf '%s\\n' \\\n  ${list} \\\n  > _list.txt && ffmpeg -hide_banner -f concat -safe 0 -i _list.txt ${codec} -movflags +faststart ${out}`;
 }
 function chapterLines(pr){
@@ -637,6 +654,7 @@ function ytId(u){
 }
 function ytLink(id, t){ return `https://youtu.be/${id}?t=${Math.max(0,Math.floor(t))}`; }
 function renderOut(pr){
+  $('osSteps').innerHTML=OS_STEPS[S.opts.os]||OS_STEPS.win;
   $('cmd').textContent=buildCmd();
   const L=chapterLines(pr);
   const head = S.meta.top ? `${S.meta.date} ${S.meta.top} vs ${S.meta.bot}\n\n` : '';
@@ -740,7 +758,7 @@ function save(){ if(S.sample) return; try{ localStorage.setItem('abvc-state', JS
 /* 入力欄 */
 function syncInputs(){
   $('selHalf').value=S.opts.half; $('selSort').value=S.opts.sort; $('oPitcher').checked=S.opts.pitcher; $('oSit').checked=S.opts.sit;
-  $('oMerge').checked=S.opts.merge; $('offset').value=S.opts.offset; $('ytUrl').value=S.opts.yt; $('selMode').value=S.opts.mode; $('outName').value=S.opts.out;
+  $('oMerge').checked=S.opts.merge; $('offset').value=S.opts.offset; $('ytUrl').value=S.opts.yt; $('selMode').value=S.opts.mode; $('selOS').value=S.opts.os; $('outName').value=S.opts.out;
   $('oScale').checked=S.opts.scale;
 }
 const bind=(id,key,ev,fn)=>$(id).addEventListener(ev,e=>{ S.opts[key]=fn(e.target); render(); });
@@ -751,6 +769,7 @@ bind('oMerge','merge','change',t=>t.checked);
 bind('offset','offset','input',t=>Math.max(0,+t.value||0));
 bind('ytUrl','yt','input',t=>t.value);
 bind('selMode','mode','change',t=>t.value);
+bind('selOS','os','change',t=>t.value);
 bind('outName','out','input',t=>{ let v=t.value.trim()||'試合動画.mp4'; if(!/\.(mp4|mov|m4v)$/i.test(v)) v+='.mp4'; return v; });
 bind('oScale','scale','change',t=>t.checked);
 
