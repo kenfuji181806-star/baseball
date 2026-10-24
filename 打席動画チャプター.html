@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>
+<title>打席動画チャプター</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: 縦一列の作業手順（1〜5）。各手順はスコアボード風の見出し帯＋本文。スマホ幅基準 */
+:root{
+  --bg:#f3f5f1; --panel:#ffffff; --ink:#18201b; --muted:#5e6b63; --line:#d6ddd6;
+  --field:#1f6b3a; --field-ink:#ffffff; --chalk:#e9efe9; --accent:#c8501e; --accent-soft:#fbe6dc;
+  --ok:#1f7a45; --warn:#a86a00; --bad:#b3261e; --chip:#eef2ee;
+  --f-body:'Hiragino Kaku Gothic ProN','Hiragino Sans','Noto Sans JP','Yu Gothic Medium','Yu Gothic',Meiryo,sans-serif;
+  --f-num:'IBM Plex Mono','SFMono-Regular',Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1512; --panel:#161e19; --ink:#e3ebe5; --muted:#8fa096; --line:#2a362f;
+  --field:#1d5c34; --field-ink:#eaf5ec; --chalk:#1c2620; --accent:#ff8a52; --accent-soft:#3a2217;
+  --ok:#4cc27e; --warn:#e0a83a; --bad:#ff7b72; --chip:#1f2a23; color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --bg:#0f1512; --panel:#161e19; --ink:#e3ebe5; --muted:#8fa096; --line:#2a362f;
+  --field:#1d5c34; --field-ink:#eaf5ec; --chalk:#1c2620; --accent:#ff8a52; --accent-soft:#3a2217;
+  --ok:#4cc27e; --warn:#e0a83a; --bad:#ff7b72; --chip:#1f2a23; color-scheme:dark; }
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 80px}
+.wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header.top{display:flex;flex-direction:column;gap:6px}
+header.top h1{font-size:24px;font-weight:800;margin:0;text-wrap:balance;letter-spacing:.02em}
+header.top p{margin:0;color:var(--muted);max-width:62ch}
+.flow{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--muted);margin-top:4px}
+.flow span{background:var(--chip);border-radius:4px;padding:2px 8px}
+section.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.step-h{display:flex;align-items:center;gap:12px;background:var(--field);color:var(--field-ink);padding:10px 14px}
+.step-h .no{font-family:var(--f-num);font-weight:600;font-size:13px;border:1.5px solid currentColor;border-radius:4px;padding:0 7px;line-height:22px}
+.step-h h2{margin:0;font-size:16px;font-weight:600}
+.step-h .st{margin-left:auto;font-size:12px;opacity:.9;text-align:right}
+.step-b{padding:14px;display:flex;flex-direction:column;gap:12px}
+.hint{color:var(--muted);font-size:13px;margin:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,.btn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--chalk);color:var(--ink);border-radius:8px;
+  padding:8px 14px;cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:6px}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button:focus-visible,.btn:focus-within,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.btn input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.btn{position:relative}
+select,input[type=text],input[type=number],input[type=url]{font:inherit;font-size:14px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-height:40px;max-width:100%}
+label.chk{display:inline-flex;align-items:center;gap:6px;font-size:14px;cursor:pointer}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+.banner{background:var(--accent-soft);border:1px solid var(--accent);color:var(--ink);border-radius:8px;padding:8px 12px;font-size:13px}
+.summary{display:flex;flex-wrap:wrap;gap:8px}
+.pill{font-size:12px;border-radius:999px;padding:3px 10px;background:var(--chip);color:var(--ink);font-variant-numeric:tabular-nums}
+.pill.ok{color:var(--ok);box-shadow:inset 0 0 0 1px var(--ok)}
+.pill.warn{color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn)}
+.pill.bad{color:var(--bad);box-shadow:inset 0 0 0 1px var(--bad)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+
+/* 対応表 */
+.map{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.map-row{display:grid;grid-template-columns:64px minmax(0,1fr) minmax(0,1fr);gap:0;border-top:1px solid var(--line)}
+.map-row:first-child{border-top:0}
+.map-row.head{background:var(--chip);font-size:12px;color:var(--muted);font-weight:600}
+.map-row > div{padding:8px 10px;min-width:0}
+.map-row .t{font-family:var(--f-num);font-size:13px;font-weight:600;color:var(--field);display:flex;align-items:flex-start}
+:root[data-theme="dark"] .map-row .t{color:var(--ok)}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .map-row .t{color:var(--ok)} }
+.map-row.inn{background:var(--chalk);font-size:12px;font-weight:600;color:var(--muted)}
+.map-row.inn > div{padding:4px 10px;grid-column:1/-1}
+.pa .l1{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.pa .bt{font-weight:600}
+.pa .rs{color:var(--accent);font-weight:600}
+.pa .l2{font-size:12px;color:var(--muted)}
+.pa.off,.clip.off{opacity:.42}
+.pa.off .bt{text-decoration:line-through}
+.clip-stack{display:flex;flex-direction:column;gap:8px;padding:8px 10px}
+.clip-stack > .clip{padding:0}
+.clip .nm{font-size:13px;overflow-wrap:anywhere}
+.clip .l2{font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.clip.empty{color:var(--bad);font-size:13px}
+.mini{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.mini button{min-height:30px;padding:2px 8px;font-size:12px;border-radius:6px}
+.map-row.short .clip .dur{color:var(--warn);font-weight:600}
+@media (max-width:520px){
+  .map-row{grid-template-columns:52px minmax(0,1fr)}
+  .map-row > .clip,.map-row > .clip-stack{grid-column:2;padding-top:0}
+  .map-row.head .hc{display:none}
+}
+textarea{width:100%;min-height:200px;font-family:var(--f-num);font-size:13px;line-height:1.5;background:var(--chalk);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;resize:vertical}
+pre.cmd{margin:0;background:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--f-num);font-size:12px;overflow-x:auto;white-space:pre;max-height:180px}
+ol.steps{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:4px;font-size:14px}
+ol.steps code,.hint code{font-family:var(--f-num);background:var(--chip);padding:0 4px;border-radius:3px;font-size:12px}
+video{width:100%;max-width:100%;border-radius:8px;background:#000;max-height:60vh}
+.preview{display:flex;flex-direction:column;gap:6px}
+.links{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;max-height:340px;overflow:auto}
+.links a{display:grid;grid-template-columns:64px minmax(0,1fr);gap:8px;padding:6px 10px;border-top:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:13px}
+.links a:first-child{border-top:0}
+.links a:hover{background:var(--chip)}
+.links a .num{color:var(--accent)}
+details summary{cursor:pointer;font-size:14px;font-weight:600}
+details > div{margin-top:8px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);
+  padding:10px 16px;border-radius:8px;font-size:14px;max-width:calc(100% - 32px);z-index:20;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.on{opacity:1}
+@media (prefers-reduced-motion: reduce){#toast{transition:none}}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>打席動画チャプター</h1>
+    <p>記録アプリの打席結果と打席ごとの動画を順番に対応させて、1本の動画にまとめるためのコマンドとYouTubeのチャプター（タイムスタンプ）を作ります。動画ファイルはこの端末の中で長さを読むだけで、どこにもアップロードされません。</p>
+    <div class="flow"><span>記録Excel</span><span>→ 打席動画を選ぶ</span><span>→ 対応を確認</span><span>→ 1本につなぐ</span><span>→ YouTubeチャプター・リンク</span></div>
+  </header>
+
+  <div id="sampleBanner" class="banner" hidden>サンプル表示中です。下の 1 で記録アプリのExcelを、2 で動画を読み込むと置き換わります。</div>
+
+  <!-- 1 -->
+  <section class="step">
+    <div class="step-h"><span class="no">1</span><h2>記録アプリのExcelを読み込む</h2><span class="st" id="st1"></span></div>
+    <div class="step-b">
+      <div class="row">
+        <label class="btn primary">Excelを選ぶ<input type="file" id="fXlsx" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+        <label class="btn">保存した作業データを開く<input type="file" id="fJson" accept=".json,application/json"></label>
+      </div>
+      <div class="grid2">
+        <label class="field" id="gameWrap" hidden>試合
+          <select id="selGame"></select></label>
+        <label class="field">撮影した打席
+          <select id="selHalf">
+            <option value="all">両チームすべて</option>
+            <option value="表">表（先攻の攻撃）だけ</option>
+            <option value="裏">裏（後攻の攻撃）だけ</option>
+          </select></label>
+      </div>
+      <p class="hint">「投球記録」シートの1球ごとの記録を、打者ごとに「打席結果」の行まで束ねて打席の一覧にします。v9.6以前のExcelでも、結果とカウントから打席の終わりを判定します。</p>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="step">
+    <div class="step-h"><span class="no">2</span><h2>打席ごとの動画を選ぶ</h2><span class="st" id="st2"></span></div>
+    <div class="step-b">
+      <div class="row">
+        <label class="btn primary">動画を選ぶ（複数可）<input type="file" id="fClips" accept="video/*,.mov,.mp4,.m4v" multiple></label>
+        <label class="field" style="flex-direction:row;align-items:center;gap:8px">並び順
+          <select id="selSort">
+            <option value="ctime">撮影日時</option>
+            <option value="name">ファイル名</option>
+            <option value="keep">選んだ順</option>
+          </select></label>
+      </div>
+      <p class="hint">長さと撮影日時はファイルの先頭情報から読みます。iPhoneの「写真」から選ぶとファイル名が変わることがあるので、並びは撮影日時がおすすめです。</p>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="step">
+    <div class="step-h"><span class="no">3</span><h2>打席と動画の対応を確認</h2><span class="st" id="st3"></span></div>
+    <div class="step-b">
+      <div class="summary" id="sum"></div>
+      <p class="hint">上から順に1打席＝1本で組み合わせます。撮れていない打席は「動画なし」、余分な動画は「使わない」にすると、下の行が詰まって対応が直ります。▶で動画の中身を確認できます。</p>
+      <div class="preview" id="pvWrap" hidden>
+        <video id="pv" controls playsinline></video>
+        <div class="row"><span class="hint" id="pvName"></span><button id="pvClose">閉じる</button></div>
+      </div>
+      <div class="map" id="map"></div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="step">
+    <div class="step-h"><span class="no">4</span><h2>動画を1本につなぐ</h2><span class="st">Mac（無料のffmpeg）</span></div>
+    <div class="step-b">
+      <ol class="steps">
+        <li>はじめての時だけ：ターミナルで <code>brew install ffmpeg</code> を実行</li>
+        <li>動画を1つのフォルダに入れ、ターミナルで <code>cd␣</code> と打ってからフォルダをドラッグし、Enter</li>
+        <li>下のコマンドをコピーして貼り付け、Enter。フォルダに結合動画ができます</li>
+      </ol>
+      <div class="grid2">
+        <label class="field">出力ファイル名<input type="text" id="outName" value="試合動画.mp4"></label>
+        <label class="field">つなぎ方
+          <select id="selMode">
+            <option value="copy">そのままつなぐ（速い・画質そのまま）</option>
+            <option value="enc">変換してつなぐ（機種や設定が混ざる時）</option>
+          </select></label>
+      </div>
+      <pre class="cmd" id="cmd"></pre>
+      <div class="row">
+        <button class="primary" id="btnCopyCmd">コマンドをコピー</button>
+        <button id="btnSaveCmd">テキストで保存</button>
+      </div>
+      <details>
+        <summary>iPhone・iPadでつなぐ場合</summary>
+        <div><p class="hint">iMovieなどでつなぐ場合は、3の表と同じ順番で並べ、クリップ間のトランジション（ディゾルブ）を「なし」にしてください。トランジションが入ると、その分だけ時刻がずれます。書き出した動画を5の「結合後の動画で確認」で読み込めば、ずれを補正できます。</p></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="step">
+    <div class="step-h"><span class="no">5</span><h2>YouTubeのチャプターとリンク</h2><span class="st" id="st5"></span></div>
+    <div class="step-b">
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="oPitcher" checked>投手名を入れる</label>
+        <label class="chk"><input type="checkbox" id="oSit">アウト・走者を入れる</label>
+        <label class="chk"><input type="checkbox" id="oMerge" checked>10秒未満の打席は次の打席とまとめる</label>
+      </div>
+      <div class="grid2">
+        <label class="field">冒頭に入れた映像の長さ（秒）<input type="number" id="offset" min="0" step="0.1" value="0"></label>
+        <label class="field">YouTubeのURL（アップロード後）<input type="url" id="ytUrl" placeholder="https://youtu.be/xxxxxxxxxxx"></label>
+      </div>
+      <div class="summary" id="sum5"></div>
+      <textarea id="chap" readonly></textarea>
+      <div class="row">
+        <button class="primary" id="btnCopyChap">チャプターをコピー</button>
+        <span class="hint">YouTubeの「説明」欄に貼り付けると、動画にチャプターが付きます。</span>
+      </div>
+      <div class="links" id="links" hidden></div>
+      <div class="row">
+        <button id="btnXlsx">リンク付きExcelを保存</button>
+        <button id="btnJson">作業データを保存（.json）</button>
+      </div>
+      <p class="hint">リンク付きExcelは、読み込んだExcelの「投球記録」シートの末尾に「動画開始秒」「動画リンク」列を足し、打席ごとの一覧シート「打席動画」を加えたものです。元の列の位置は変わらないので、集計アプリでもそのまま読めます。</p>
+      <details id="verify">
+        <summary>結合後の動画で確認・補正</summary>
+        <div class="step-b" style="padding:0">
+          <div class="row"><label class="btn">結合した動画を選ぶ<input type="file" id="fJoined" accept="video/*,.mov,.mp4,.m4v"></label><span class="hint" id="joinedInfo"></span></div>
+          <label class="chk" id="scaleWrap" hidden><input type="checkbox" id="oScale">長さの差を各打席に割り振って補正する</label>
+          <video id="jv" controls playsinline hidden></video>
+          <p class="hint">読み込むと下の一覧の打席をタップした位置から再生します。最初と最後の打席の頭が合っていれば、YouTubeでも同じ位置になります。</p>
+          <div class="links" id="jlinks"></div>
+        </div>
+      </details>
+    </div>
+  </section>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+'use strict';
+document.documentElement.lang='ja';
+/* ================= 状態 ================= */
+const S = {
+  meta:{}, pas:[], clips:[], sample:false,
+  opts:{half:'all', sort:'ctime', pitcher:true, sit:false, merge:true, offset:0, yt:'', mode:'copy', out:'試合動画.mp4', scale:false},
+  joinedDur:null,
+};
+let WB=null, WB_ROWS=null, WB_SHEET='', GAMES=[];
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(m, ms=2600){ const t=$('toast'); t.textContent=m; t.classList.add('on'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('on'), ms); }
+
+/* ================= 打席の組み立て ================= */
+const HIT = new Set(['単打','二塁打','三塁打','本塁打','セーフティーバント','内野安打']);
+const PA_END = new Set(['空振り三振','見逃し三振','振り逃げ','振り逃げ（アウト）','三振','四球','故意四球','死球',
+  'ゴロアウト','フライアウト','ライナーアウト','内野フライ','併殺打','失策','野選','守備妨害','犠打','犠飛','打撃妨害']);
+function derivePA(r){
+  const res=String(r['結果']||''), b=+r['B']||0, s=+r['S']||0;
+  if(HIT.has(res)||PA_END.has(res)) return res;
+  if(res==='ボール'||res==='ピッチクロック') return b>=3?'四球':'';
+  if(res==='ストライク'||res==='見逃し') return s>=2?'見逃し三振':'';
+  if(res==='空振り') return s>=2?'空振り三振':'';
+  return '';
+}
+function gameKey(r){ return String(r['試合ID']||'') || [r['日付'],r['試合番号'],r['先攻'],r['後攻']].join('_'); }
+function buildPAs(rows, rowIdx){
+  const hasPa = rows.length && Object.prototype.hasOwnProperty.call(rows[0],'打席結果');
+  const hasPitch = rows.length && Object.prototype.hasOwnProperty.call(rows[0],'投球');
+  const pas=[]; let cur=null;
+  const close = complete => { if(cur){ cur.complete=complete; pas.push(cur); cur=null; } };
+  rows.forEach((r,k)=>{
+    const inn=+r['回']||0, half=String(r['表裏'])==='裏'?'裏':'表', bat=String(r['打者']||'').trim();
+    const key=inn+half+bat;
+    if(cur && cur.key!==key) close(false);
+    if(!cur) cur={key, inning:inn, half, batter:bat||'（打者不明）', bhand:String(r['打席']||''), pitcher:String(r['投手']||''),
+      parm:String(r['投球腕']||''), outs:+r['O']||0, run:[+r['R1']||0,+r['R2']||0,+r['R3']||0],
+      rows:[], pitches:0, rbi:0, result:'', count:'', skip:false};
+    cur.rows.push(rowIdx[k]);
+    const isPitch = hasPitch ? String(r['投球'])!=='0' : !(String(r['結果']||'').startsWith('牽制') || r['走者移動理由']);
+    if(isPitch){ cur.pitches++; if(r['投手']) cur.pitcher=String(r['投手']); }
+    cur.rbi += +r['打点']||0;
+    const pa = hasPa ? String(r['打席結果']||'').trim() : derivePA(r);
+    if(pa){ cur.result=pa; close(true); }
+  });
+  close(false);
+  // 打者ごとの第n打席
+  const nth={};
+  return pas.map((p,i)=>{ const k=p.half+p.batter; nth[k]=(nth[k]||0)+1; delete p.key; return Object.assign(p,{id:i, nth:nth[k]}); });
+}
+
+/* ================= Excel 読み込み ================= */
+$('fXlsx').addEventListener('change', async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  if(typeof XLSX==='undefined'){ toast('Excelの読み込み部品を準備中です。数秒後にもう一度選んでください',4000); return; }
+  try{
+    const wb=XLSX.read(await f.arrayBuffer(), {type:'array'});
+    const name = wb.SheetNames.includes('投球記録') ? '投球記録' : wb.SheetNames[0];
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[name], {defval:''});
+    if(!rows.length || !('打者' in rows[0]) || !('回' in rows[0])){ toast('「投球記録」シートに 回・打者 の列が見つかりません',4500); return; }
+    WB=wb; WB_SHEET=name; WB_ROWS=rows; S.meta.file=f.name;
+    const map=new Map();
+    rows.forEach((r,i)=>{ const k=gameKey(r); if(!map.has(k)) map.set(k,{key:k, rows:[], idx:[], r0:r}); const g=map.get(k); g.rows.push(r); g.idx.push(i); });
+    GAMES=[...map.values()];
+    const sel=$('selGame'); sel.innerHTML=GAMES.map((g,i)=>`<option value="${i}">${esc(g.r0['日付'])} ${esc(g.r0['先攻'])} vs ${esc(g.r0['後攻'])}${g.r0['試合番号']?'（'+esc(g.r0['試合番号'])+'）':''}</option>`).join('');
+    $('gameWrap').hidden = GAMES.length<2;
+    if(S.sample){ S.clips=[]; }
+    S.sample=false;
+    pickGame(0);
+    toast(`${f.name} を読み込みました（${S.pas.length}打席）`);
+  }catch(err){ console.error(err); toast('Excelを読めませんでした: '+err.message, 5000); }
+});
+$('selGame').addEventListener('change', e=>pickGame(+e.target.value));
+function pickGame(i){
+  const g=GAMES[i]; if(!g) return;
+  const r=g.r0;
+  S.meta=Object.assign({}, S.meta, {gameId:String(r['試合ID']||g.key), date:String(r['日付']||''), top:String(r['先攻']||'先攻'), bot:String(r['後攻']||'後攻'),
+    gameNo:String(r['試合番号']||''), season:String(r['シーズン']||''), gameIdx:i});
+  S.pas=buildPAs(g.rows, g.idx);
+  S.joinedDur=null;
+  render();
+}
+
+/* ================= 動画のメタ情報（mvhd） ================= */
+async function readBytes(file, pos, len){ return new DataView(await file.slice(pos, pos+len).arrayBuffer()); }
+const MAC_EPOCH = Date.UTC(1904,0,1);
+async function parseMovie(file){
+  // QuickTime/MP4 の最上位ボックスを順にたどり moov→mvhd から長さと作成日時を得る
+  let pos=0; const size=file.size;
+  for(let guard=0; pos+8<=size && guard<10000; guard++){
+    const h=await readBytes(file,pos,16);
+    let bs=h.getUint32(0); const type=String.fromCharCode(h.getUint8(4),h.getUint8(5),h.getUint8(6),h.getUint8(7));
+    let hdr=8;
+    if(bs===1){ bs=Number(h.getBigUint64(8)); hdr=16; } else if(bs===0){ bs=size-pos; }
+    if(bs<8) break;
+    if(type==='moov'){
+      const len=Math.min(bs, 64*1024*1024);
+      const m=new Uint8Array(await file.slice(pos, pos+len).arrayBuffer());
+      const dv=new DataView(m.buffer);
+      let p=hdr;
+      while(p+8<=m.length){
+        let cs=dv.getUint32(p); const ct=String.fromCharCode(m[p+4],m[p+5],m[p+6],m[p+7]);
+        if(cs<8) break;
+        if(ct==='mvhd'){
+          const v=m[p+8]; let ctime, ts, du;
+          if(v===1){ ctime=Number(dv.getBigUint64(p+12)); ts=dv.getUint32(p+28); du=Number(dv.getBigUint64(p+32)); }
+          else { ctime=dv.getUint32(p+12); ts=dv.getUint32(p+20); du=dv.getUint32(p+24); }
+          return {dur: ts? du/ts : null, ctime: ctime? MAC_EPOCH+ctime*1000 : null};
+        }
+        p+=cs;
+      }
+      return null;
+    }
+    pos+=bs;
+  }
+  return null;
+}
+function durByElement(url){
+  return new Promise(res=>{
+    const v=document.createElement('video'); v.preload='metadata'; v.muted=true;
+    const done=d=>{ v.removeAttribute('src'); v.load(); res(d); };
+    v.onloadedmetadata=()=>done(isFinite(v.duration)?v.duration:null);
+    v.onerror=()=>done(null);
+    setTimeout(()=>done(null), 15000);
+    v.src=url;
+  });
+}
+$('fClips').addEventListener('change', async e=>{
+  const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  if(S.sample){ S.sample=false; S.pas=[]; S.clips=[]; S.meta={}; }
+  $('st2').textContent='読み取り中…';
+  const add=[];
+  for(const [i,f] of files.entries()){
+    let info=null; try{ info=await parseMovie(f); }catch(err){ console.warn(err); }
+    const url=URL.createObjectURL(f);
+    let dur=info&&info.dur;
+    if(!dur) dur=await durByElement(url);
+    // 作業データから復元した同名の動画には、再生用のURLだけ付け直す
+    const same=S.clips.find(c=>!c.url && c.name===f.name);
+    if(same){ same.url=url; if(dur){ same.dur=dur; same.noDur=false; } continue; }
+    add.push({name:f.name, size:f.size, dur:dur||0, ctime:(info&&info.ctime)||f.lastModified||0, pick:S.clips.length+i, skip:false, url, noDur:!dur});
+  }
+  S.clips=S.clips.concat(add);
+  sortClips();
+  render();
+  const bad=add.filter(c=>c.noDur).length;
+  toast(`${files.length}本の動画を読み込みました`+(bad?`（${bad}本は長さを読めませんでした）`:''), 3500);
+});
+function sortClips(){
+  const m=S.opts.sort;
+  const coll=new Intl.Collator('ja',{numeric:true});
+  S.clips.sort((a,b)=> m==='name' ? coll.compare(a.name,b.name) : m==='ctime' ? (a.ctime-b.ctime)||coll.compare(a.name,b.name) : a.pick-b.pick);
+}
+$('selSort').addEventListener('change', e=>{ S.opts.sort=e.target.value; sortClips(); render(); });
+
+/* ================= 対応付けと時刻 ================= */
+function activePAs(){ return S.pas.filter(p=>!p.skip && (S.opts.half==='all' || p.half===S.opts.half)); }
+function activeClips(){ return S.clips.filter(c=>!c.skip); }
+function scaleFactor(){
+  if(!S.opts.scale || !S.joinedDur) return 1;
+  const sum=activeClips().reduce((a,c)=>a+c.dur,0);
+  return sum>0 ? (S.joinedDur-(+S.opts.offset||0))/sum : 1;
+}
+function pairs(){
+  const P=activePAs(), C=activeClips(), n=Math.min(P.length, C.length), k=scaleFactor();
+  let t=+S.opts.offset||0; const out=[];
+  for(let i=0;i<n;i++){ const d=C[i].dur*k; out.push({pa:P[i], clip:C[i], start:t, dur:d}); t+=d; }
+  return out;
+}
+function fmt(sec){
+  sec=Math.max(0,Math.floor(sec+1e-6));
+  const h=Math.floor(sec/3600), m=Math.floor(sec%3600/60), s=sec%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+}
+function fmtDur(d){ return d? (d<60? d.toFixed(1)+'秒' : `${Math.floor(d/60)}分${String(Math.round(d%60)).padStart(2,'0')}秒`) : '長さ不明'; }
+const RUN_TXT = r => { const s=[r[0]?'一':'',r[1]?'二':'',r[2]?'三':''].join(''); return s? s+'塁' : '走者なし'; };
+function resultText(p){
+  if(!p.complete && !p.result) return '打席途中で攻守交代';
+  return p.result + (p.rbi>0 ? `（${p.rbi}打点）` : '');
+}
+function paLabel(p){
+  let s=`${p.inning}回${p.half} ${p.batter}`;
+  if(S.opts.pitcher && p.pitcher) s+=`（vs ${p.pitcher}）`;
+  if(S.opts.sit) s+=` ${p.outs}死${RUN_TXT(p.run)}`;
+  return s+' '+resultText(p);
+}
+
+/* ================= 描画 ================= */
+function render(){
+  $('sampleBanner').hidden=!S.sample;
+  const P=activePAs(), C=activeClips(), pr=pairs();
+  const shown=S.pas.filter(p=>S.opts.half==='all'||p.half===S.opts.half);
+  $('st1').textContent = S.meta.top ? `${S.meta.date} ${S.meta.top} vs ${S.meta.bot}` : '';
+  $('st2').textContent = S.clips.length ? `${S.clips.length}本・計${fmtDur(S.clips.reduce((a,c)=>a+c.dur,0))}` : '';
+  // サマリー
+  const diff=P.length-C.length, short=pr.filter(x=>x.dur<10).length, nodur=C.filter(c=>!c.dur).length;
+  const pills=[`<span class="pill">打席 ${P.length}</span>`, `<span class="pill">動画 ${C.length}</span>`];
+  if(P.length && C.length) pills.push(diff===0?`<span class="pill ok">本数一致</span>`:`<span class="pill bad">${diff>0?`動画が${diff}本足りない`:`動画が${-diff}本多い`}</span>`);
+  if(short) pills.push(`<span class="pill warn">10秒未満 ${short}本</span>`);
+  if(nodur) pills.push(`<span class="pill bad">長さ不明 ${nodur}本</span>`);
+  $('sum').innerHTML=pills.join('');
+  $('st3').textContent = pr.length? `${pr.length}組・合計 ${fmt(pr.length? pr[pr.length-1].start+pr[pr.length-1].dur:0)}` : '';
+  // 対応表: 有効な打席・動画を順に組み合わせ、除外したものは元の位置に薄く表示
+  const rows=[]; const clipsAll=S.clips;
+  // 除外クリップは並び順の位置に挿入表示するため、クリップ側の列を作る
+  const clipCol=[]; // 各有効打席i に対応する [除外クリップ..., 有効クリップ]
+  const pendingOff=[];
+  clipsAll.forEach(c=>{ if(c.skip) pendingOff.push(c); else { clipCol.push({off:pendingOff.splice(0), c}); } });
+  const tailOff=pendingOff;
+  let lastInn='';
+  let pi=0; // 有効打席の番号
+  shown.forEach(p=>{
+    const innKey=p.inning+p.half;
+    if(innKey!==lastInn){ lastInn=innKey; rows.push(`<div class="map-row inn"><div>${p.inning}回${p.half}　${esc(p.half==='表'?S.meta.top:S.meta.bot)}の攻撃</div></div>`); }
+    if(p.skip){ rows.push(rowHtml(p,null,null,[])); return; }
+    const slot=clipCol[pi]; const x=pr[pi]; pi++;
+    rows.push(rowHtml(p, slot?slot.c:null, x, slot?slot.off:[]));
+  });
+  // 打席より多い動画
+  for(let j=pi;j<clipCol.length;j++) rows.push(rowHtml(null, clipCol[j].c, null, clipCol[j].off));
+  if(tailOff.length) rows.push(rowHtml(null,null,null,tailOff));
+  $('map').innerHTML = `<div class="map-row head"><div>開始</div><div>打席（記録アプリ）</div><div class="hc">動画</div></div>` +
+    (rows.length? rows.join('') : `<div class="map-row"><div></div><div class="hint">Excelと動画を読み込むと、ここに対応表が出ます。</div><div></div></div>`);
+  renderOut(pr);
+  save();
+}
+function clipHtml(c, off){
+  const i=S.clips.indexOf(c);
+  return `<div class="clip${off?' off':''}"><div class="nm">${esc(c.name)}</div>
+    <div class="l2"><span class="num dur">${fmtDur(c.dur)}</span>${c.ctime?`<span class="num">${new Date(c.ctime).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>`:''}</div>
+    <div class="mini">${c.url?`<button data-act="play" data-i="${i}" aria-label="再生">▶</button>`:''}
+      <button data-act="up" data-i="${i}" aria-label="上へ">▲</button><button data-act="down" data-i="${i}" aria-label="下へ">▼</button>
+      <button data-act="cskip" data-i="${i}">${off?'使う':'使わない'}</button></div></div>`;
+}
+function rowHtml(p, c, x, offs){
+  const pa = p ? `<div class="pa${p.skip?' off':''}"><div class="l1"><span class="bt">${esc(p.batter)}</span><span class="l2">第${p.nth}打席</span><span class="rs">${esc(resultText(p))}</span></div>
+      <div class="l2">${p.outs}死 ${RUN_TXT(p.run)}・投手 ${esc(p.pitcher)}・${p.pitches}球</div>
+      <div class="mini"><button data-act="pskip" data-id="${p.id}">${p.skip?'動画あり':'動画なし'}</button></div></div>`
+    : `<div class="pa"><span class="hint">${c?'対応する打席なし':''}</span></div>`;
+  let cl = c ? clipHtml(c,false) : (p && !p.skip ? `<div class="clip empty">動画なし（足りません）</div>` : `<div class="clip"></div>`);
+  if(offs && offs.length) cl = `<div class="clip-stack">${offs.map(o=>clipHtml(o,true)).join('')}${c?clipHtml(c,false):''}</div>`;
+  const t = x ? `<div class="t num">${fmt(x.start)}</div>` : `<div class="t"></div>`;
+  return `<div class="map-row${x&&x.dur<10?' short':''}">${t}${pa}${cl}</div>`;
+}
+$('map').addEventListener('click', e=>{
+  const b=e.target.closest('button[data-act]'); if(!b) return;
+  const a=b.dataset.act;
+  if(a==='pskip'){ const p=S.pas.find(q=>q.id===+b.dataset.id); p.skip=!p.skip; }
+  else {
+    const i=+b.dataset.i, c=S.clips[i];
+    if(a==='cskip') c.skip=!c.skip;
+    if(a==='up'&&i>0){ [S.clips[i-1],S.clips[i]]=[S.clips[i],S.clips[i-1]]; markManual(); }
+    if(a==='down'&&i<S.clips.length-1){ [S.clips[i+1],S.clips[i]]=[S.clips[i],S.clips[i+1]]; markManual(); }
+    if(a==='play'){ $('pvWrap').hidden=false; $('pv').src=c.url; $('pvName').textContent=c.name; $('pv').play().catch(()=>{}); $('pvWrap').scrollIntoView({block:'nearest'}); return; }
+  }
+  render();
+});
+function markManual(){ S.clips.forEach((c,k)=>c.pick=k); S.opts.sort='keep'; $('selSort').value='keep'; }
+$('pvClose').addEventListener('click', ()=>{ $('pv').pause(); $('pv').removeAttribute('src'); $('pv').load(); $('pvWrap').hidden=true; });
+
+/* ================= 出力 ================= */
+function shq(s){ return "'"+String(s).replace(/'/g, "'\\''")+"'"; }
+function buildCmd(){
+  const C=activeClips();
+  if(!C.length) return '# 2 で動画を選ぶと、ここにコマンドが出ます';
+  // concat の一覧ファイル内では ' を '\'' に置き換える必要がある
+  const listLine = n => "file '"+n.replace(/'/g, "'\\''")+"'";
+  const list = C.map(c=>shq(listLine(c.name))).join(' \\\n  ');
+  const out = shq(S.opts.out||'試合動画.mp4');
+  const codec = S.opts.mode==='enc'
+    ? '-c:v libx264 -preset veryfast -crf 20 -c:a aac -b:a 160k'
+    : '-c copy';
+  return `printf '%s\\n' \\\n  ${list} \\\n  > _list.txt && ffmpeg -hide_banner -f concat -safe 0 -i _list.txt ${codec} -movflags +faststart ${out}`;
+}
+function chapterLines(pr){
+  const lines=[]; const off=+S.opts.offset||0;
+  if(!pr.length) return lines;
+  if(off>=1) lines.push({t:0, s:'オープニング'});
+  let g=null;
+  pr.forEach((x,i)=>{
+    if(!g) g={t:x.start, labels:[], dur:0};
+    g.labels.push(paLabel(x.pa)); g.dur+=x.dur;
+    const last=i===pr.length-1;
+    if(!S.opts.merge || g.dur>=10 || last){ lines.push({t:g.t, s:g.labels.join(' / ')}); g=null; }
+  });
+  // 最後の章が10秒未満なら直前の章にまとめる
+  if(S.opts.merge && lines.length>1){
+    const L=lines[lines.length-1], endT=pr[pr.length-1].start+pr[pr.length-1].dur;
+    if(endT-L.t<10){ lines.pop(); lines[lines.length-1].s+=' / '+L.s; }
+  }
+  lines[0].t=0;
+  return lines;
+}
+function ytId(u){
+  u=String(u||'').trim(); if(!u) return '';
+  const m=u.match(/(?:youtu\.be\/|[?&]v=|\/(?:live|shorts|embed)\/)([A-Za-z0-9_-]{11})/);
+  if(m) return m[1];
+  return /^[A-Za-z0-9_-]{11}$/.test(u)? u : '';
+}
+function ytLink(id, t){ return `https://youtu.be/${id}?t=${Math.max(0,Math.floor(t))}`; }
+function renderOut(pr){
+  $('cmd').textContent=buildCmd();
+  const L=chapterLines(pr);
+  const head = S.meta.top ? `${S.meta.date} ${S.meta.top} vs ${S.meta.bot}\n\n` : '';
+  $('chap').value = L.length ? head + L.map(l=>`${fmt(l.t)} ${l.s}`).join('\n') : '';
+  const pills=[];
+  if(L.length){
+    pills.push(`<span class="pill">チャプター ${L.length}</span>`);
+    let minGap=Infinity; const end=pr[pr.length-1].start+pr[pr.length-1].dur;
+    L.forEach((l,i)=>{ const n=i<L.length-1?L[i+1].t:end; minGap=Math.min(minGap,n-l.t); });
+    if(L.length<3) pills.push(`<span class="pill bad">3つ以上必要</span>`);
+    else if(minGap<10) pills.push(`<span class="pill bad">10秒未満の章あり：YouTubeでチャプターが無効になります</span>`);
+    else pills.push(`<span class="pill ok">YouTubeの条件を満たしています</span>`);
+  }
+  $('sum5').innerHTML=pills.join('');
+  const id=ytId(S.opts.yt);
+  $('st5').textContent = id ? 'リンク作成済み' : '';
+  if(id && pr.length){
+    $('links').hidden=false;
+    $('links').innerHTML=pr.map(x=>`<a href="${ytLink(id,x.start)}" target="_blank" rel="noopener"><span class="num">${fmt(x.start)}</span><span>${esc(paLabel(x.pa))}</span></a>`).join('');
+  } else $('links').hidden=true;
+  // 確認用プレイヤーの一覧
+  $('jlinks').innerHTML = S.joinedDur ? pr.map(x=>`<a href="#" data-t="${x.start}"><span class="num">${fmt(x.start)}</span><span>${esc(paLabel(x.pa))}</span></a>`).join('') : '';
+}
+
+/* コピー */
+async function copyText(txt, okMsg){
+  try{ await navigator.clipboard.writeText(txt); toast(okMsg); }
+  catch(e){ toast('コピーできませんでした。文字を長押しして選んでください'); }
+}
+$('btnCopyCmd').addEventListener('click', ()=>copyText(buildCmd(), 'コマンドをコピーしました'));
+$('btnCopyChap').addEventListener('click', ()=>{ const v=$('chap').value; if(!v){toast('先に打席と動画を対応させてください');return;} copyText(v,'チャプターをコピーしました'); });
+
+/* 保存（claude.ai上では確認画面つき保存、それ以外は通常のダウンロード） */
+async function saveFile(filename, blob){
+  try{
+    if(window.claude && typeof window.claude.use==='function'){
+      const d=await window.claude.use('downloads');
+      if(d){
+        try{ await d.save({filename, data:blob}); toast('保存しました'); }
+        catch(err){ if(err && err.code!=='declined') toast('保存できませんでした: '+(err.message||err.code), 4000); }
+        return;
+      }
+    }
+  }catch(e){}
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+const baseName = () => (`${S.meta.date||''}_${S.meta.top||''}vs${S.meta.bot||''}`).replace(/[\\/:*?"<>|\s]/g,'') || '打席動画';
+$('btnSaveCmd').addEventListener('click', ()=>saveFile(baseName()+'_結合コマンド.txt', new Blob([buildCmd()+'\n'],{type:'text/plain'})));
+
+$('btnXlsx').addEventListener('click', ()=>{
+  if(typeof XLSX==='undefined'){ toast('Excelの部品を準備中です'); return; }
+  const pr=pairs(); if(!pr.length){ toast('先に打席と動画を対応させてください'); return; }
+  const id=ytId(S.opts.yt);
+  const out = WB || XLSX.utils.book_new();
+  // 打席動画シート
+  const head=['試合ID','日付','回','表裏','攻撃チーム','打者','第n打席','投手','打席結果','打点','球数','アウト','走者','動画ファイル','開始','動画開始秒','長さ秒','動画リンク'];
+  const aoa=[head, ...pr.map(x=>{ const p=x.pa; return [S.meta.gameId||'', S.meta.date||'', p.inning, p.half, p.half==='表'?S.meta.top:S.meta.bot,
+    p.batter, p.nth, p.pitcher, resultText(p), p.rbi, p.pitches, p.outs, RUN_TXT(p.run), x.clip.name, fmt(x.start), Math.floor(x.start), Math.round(x.dur*10)/10, id?ytLink(id,x.start):'']; })];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:22},{wch:10},{wch:4},{wch:4},{wch:10},{wch:10},{wch:6},{wch:10},{wch:16},{wch:4},{wch:4},{wch:4},{wch:8},{wch:18},{wch:8},{wch:8},{wch:6},{wch:36}];
+  if(id) pr.forEach((x,i)=>{ const ref=XLSX.utils.encode_cell({r:i+1,c:17}); if(ws[ref]) ws[ref].l={Target:ws[ref].v}; });
+  if(out.SheetNames.includes('打席動画')){ out.Sheets['打席動画']=ws; } else XLSX.utils.book_append_sheet(out, ws, '打席動画');
+  // 投球記録シートの末尾に列を追加
+  if(WB && WB_SHEET){
+    const sh=WB.Sheets[WB_SHEET];
+    const a=XLSX.utils.sheet_to_json(sh,{header:1,defval:''});
+    let cS=a[0].indexOf('動画開始秒'), cL=a[0].indexOf('動画リンク');
+    if(cS<0){ cS=a[0].length; a[0].push('動画開始秒'); }
+    if(cL<0){ cL=a[0].length; a[0].push('動画リンク'); }
+    // この試合の行だけ一旦空にしてから書き込む
+    const g=GAMES[S.meta.gameIdx||0];
+    if(g) g.idx.forEach(ri=>{ const row=a[ri+1]; while(row.length<=cL) row.push(''); row[cS]=''; row[cL]=''; });
+    pr.forEach(x=>x.pa.rows.forEach(ri=>{ const row=a[ri+1]; if(!row) return; while(row.length<=cL) row.push(''); row[cS]=Math.floor(x.start); row[cL]=id?ytLink(id,x.start):''; }));
+    const nws=XLSX.utils.aoa_to_sheet(a); if(sh['!cols']) nws['!cols']=sh['!cols'];
+    WB.Sheets[WB_SHEET]=nws;
+  }
+  const buf=XLSX.write(out,{bookType:'xlsx',type:'array'});
+  const fn=(S.meta.file? S.meta.file.replace(/\.xlsx?$/i,'') : baseName())+'_動画リンク.xlsx';
+  saveFile(fn, new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+});
+
+/* 作業データ（JSON） */
+function snapshot(){
+  return {app:'打席動画チャプター', v:1, meta:S.meta, opts:S.opts, joinedDur:S.joinedDur,
+    pas:S.pas, clips:S.clips.map(({url,...c})=>c)};
+}
+$('btnJson').addEventListener('click', ()=>saveFile(baseName()+'_打席動画.json', new Blob([JSON.stringify(snapshot())],{type:'application/json'})));
+$('fJson').addEventListener('change', async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try{ const d=JSON.parse(await f.text()); if(d.app!=='打席動画チャプター') throw new Error('このツールの作業データではありません'); load(d); toast('作業データを開きました'); }
+  catch(err){ toast('開けませんでした: '+err.message, 4500); }
+});
+function load(d){
+  WB=null; WB_ROWS=null; GAMES=[]; $('gameWrap').hidden=true;
+  S.meta=d.meta||{}; Object.assign(S.opts, d.opts||{}); S.pas=d.pas||[]; S.clips=(d.clips||[]).map(c=>Object.assign({},c)); S.joinedDur=d.joinedDur||null; S.sample=!!d.sample;
+  syncInputs(); render();
+}
+function save(){ if(S.sample) return; try{ localStorage.setItem('abvc-state', JSON.stringify(snapshot())); }catch(e){} }
+
+/* 入力欄 */
+function syncInputs(){
+  $('selHalf').value=S.opts.half; $('selSort').value=S.opts.sort; $('oPitcher').checked=S.opts.pitcher; $('oSit').checked=S.opts.sit;
+  $('oMerge').checked=S.opts.merge; $('offset').value=S.opts.offset; $('ytUrl').value=S.opts.yt; $('selMode').value=S.opts.mode; $('outName').value=S.opts.out;
+  $('oScale').checked=S.opts.scale;
+}
+const bind=(id,key,ev,fn)=>$(id).addEventListener(ev,e=>{ S.opts[key]=fn(e.target); render(); });
+bind('selHalf','half','change',t=>t.value);
+bind('oPitcher','pitcher','change',t=>t.checked);
+bind('oSit','sit','change',t=>t.checked);
+bind('oMerge','merge','change',t=>t.checked);
+bind('offset','offset','input',t=>Math.max(0,+t.value||0));
+bind('ytUrl','yt','input',t=>t.value);
+bind('selMode','mode','change',t=>t.value);
+bind('outName','out','input',t=>{ let v=t.value.trim()||'試合動画.mp4'; if(!/\.(mp4|mov|m4v)$/i.test(v)) v+='.mp4'; return v; });
+bind('oScale','scale','change',t=>t.checked);
+
+/* 結合後の動画で確認 */
+$('fJoined').addEventListener('change', async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  let info=null; try{ info=await parseMovie(f); }catch(err){}
+  const url=URL.createObjectURL(f);
+  const d=(info&&info.dur)||await durByElement(url);
+  if(!d){ toast('この動画の長さを読めませんでした'); return; }
+  S.joinedDur=d;
+  const jv=$('jv'); jv.hidden=false; jv.src=url;
+  const sum=activeClips().reduce((a,c)=>a+c.dur,0)+(+S.opts.offset||0);
+  const diff=d-sum;
+  $('joinedInfo').textContent=`長さ ${fmt(d)}（${d.toFixed(1)}秒）・各動画の合計との差 ${diff>=0?'+':''}${diff.toFixed(1)}秒`;
+  $('scaleWrap').hidden=Math.abs(diff)<0.5;
+  render();
+});
+$('jlinks').addEventListener('click', e=>{
+  const a=e.target.closest('a[data-t]'); if(!a) return; e.preventDefault();
+  const jv=$('jv'); jv.currentTime=+a.dataset.t; jv.play().catch(()=>{}); jv.scrollIntoView({block:'nearest'});
+});
+
+/* ================= サンプル ================= */
+function sampleState(){
+  const lineup={表:['田中','鈴木','高橋','伊藤','渡辺','山本','中村','小林','加藤'], 裏:['吉田','山田','佐々木','山口','松本','井上','木村','林','清水']};
+  const res=['単打','ゴロアウト','空振り三振','フライアウト','四球','二塁打','ライナーアウト','見逃し三振','ゴロアウト','本塁打','内野フライ','死球','犠打'];
+  const pas=[]; let k=0; const idx={表:0,裏:0}; let id=0; const nth={};
+  for(let inn=1;inn<=3;inn++) for(const half of ['表','裏']){
+    let outs=0;
+    while(outs<3){
+      const b=lineup[half][idx[half]++%9], r=res[k++%res.length];
+      nth[half+b]=(nth[half+b]||0)+1;
+      pas.push({id:id++, inning:inn, half, batter:b, bhand:'右', pitcher:half==='表'?'松井':'大谷', parm:'右', outs, run:[0,0,0], rows:[], pitches:2+k%5,
+        rbi:r==='本塁打'?1:0, result:r, count:'', skip:false, complete:true, nth:nth[half+b]});
+      if(/アウト|三振|フライ|犠打/.test(r)) outs++;
+    }
+  }
+  const t0=Date.UTC(2026,9,24,4,0,0);
+  const clips=pas.map((p,i)=>({name:`IMG_${4210+i}.MOV`, size:0, dur:14+((i*7)%23)+((i*3)%10)/10, ctime:t0+i*150000, pick:i, skip:false}));
+  return {app:'打席動画チャプター', v:1, sample:true, meta:{date:'2026/10/24', top:'サンプル大', bot:'例示大', gameId:'sample'}, opts:{}, pas, clips};
+}
+
+/* ================= 起動 ================= */
+(function init(){
+  let d=null; try{ d=JSON.parse(localStorage.getItem('abvc-state')||'null'); }catch(e){}
+  if(d && d.app==='打席動画チャプター' && (d.pas||[]).length){ load(d); if(S.clips.length) toast('前回の作業を復元しました。動画の再生には動画を選び直してください', 4000); }
+  else load(sampleState());
+})();
+</script>
+
+</body></html>
