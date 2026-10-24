@@ -77,6 +77,11 @@ label.chk{display:inline-flex;align-items:center;gap:6px;font-size:14px;cursor:p
 .pa.off .bt{text-decoration:line-through}
 .clip-stack{display:flex;flex-direction:column;gap:8px;padding:8px 10px}
 .clip-stack > .clip{padding:0}
+.clear{color:var(--bad);border-color:var(--bad);background:transparent}
+.clear.arm{background:var(--bad);color:#fff}
+.gap{border:1.5px dashed var(--line);border-radius:6px;padding:6px 8px;font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.gap b{color:var(--warn)}
+.map-row.gaprow .pa .bt{text-decoration:none}
 .durin{display:inline-flex;align-items:center;gap:4px;color:var(--bad);font-weight:600}
 .durin input{width:80px;min-height:30px;padding:2px 6px;font-size:13px}
 .clip .nm{font-size:13px;overflow-wrap:anywhere}
@@ -135,6 +140,7 @@ details > div{margin-top:8px}
       <div class="row">
         <label class="btn primary">Excelを選ぶ<input type="file" id="fXlsx" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
         <label class="btn">保存した作業データを開く<input type="file" id="fJson" accept=".json,application/json"></label>
+        <button class="clear" id="btnClearXlsx" hidden>Excelを解除</button>
       </div>
       </div>
       <div class="grid2">
@@ -157,7 +163,10 @@ details > div{margin-top:8px}
     <div class="step-b">
       <div class="drop" data-drop="clips">
         <div><div class="dz-t">動画をここにドラッグ＆ドロップ</div><div class="dz-s">複数まとめて、またはフォルダごと落とせます。あとから落とした分も並び順に合わせて入ります</div></div>
-        <label class="btn primary">動画を選ぶ（複数可）<input type="file" id="fClips" accept="video/*,.mov,.mp4,.m4v,.mts,.m2ts" multiple></label>
+        <div class="row">
+          <label class="btn primary">動画を選ぶ（複数可）<input type="file" id="fClips" accept="video/*,.mov,.mp4,.m4v,.mts,.m2ts" multiple></label>
+          <button class="clear" id="btnClearClips" hidden>動画をすべて解除</button>
+        </div>
       </div>
       <div class="row">
         <label class="field" style="flex-direction:row;align-items:center;gap:8px">並び順
@@ -176,7 +185,7 @@ details > div{margin-top:8px}
     <div class="step-h"><span class="no">3</span><h2>打席と動画の対応を確認</h2><span class="st" id="st3"></span></div>
     <div class="step-b">
       <div class="summary" id="sum"></div>
-      <p class="hint">上から順に1打席＝1本で組み合わせます。撮れていない打席は「動画なし」、余分な動画は「使わない」にすると、下の行が詰まって対応が直ります。▶で動画の中身を確認できます。</p>
+      <p class="hint">上から順に1打席＝1本で組み合わせます。撮り忘れた打席があるときは、その打席に入ってしまった動画の「↓空きを入れる」を押すと、その打席を空けて以降の動画が1つずつ下にずれます（打席側の「撮り忘れ」でも同じ）。余分な動画は「使わない」にすると詰まります。▶で動画の中身を確認できます。</p>
       <div class="preview" id="pvWrap" hidden>
         <video id="pv" controls playsinline></video>
         <div class="row"><span class="hint" id="pvName"></span><button id="pvClose">閉じる</button></div>
@@ -238,6 +247,7 @@ details > div{margin-top:8px}
       <div class="row">
         <button id="btnXlsx">リンク付きExcelを保存</button>
         <button id="btnJson">作業データを保存（.json）</button>
+        <button class="clear" id="btnClearAll">作業を終える（Excelと動画を解除）</button>
       </div>
       <p class="hint">リンク付きExcelは、読み込んだExcelの「投球記録」シートの末尾に「動画開始秒」「動画リンク」列を足し、打席ごとの一覧シート「打席動画」を加えたものです。元の列の位置は変わらないので、集計アプリでもそのまま読めます。</p>
       <details id="verify">
@@ -519,6 +529,8 @@ function paLabel(p){
 /* ================= 描画 ================= */
 function render(){
   $('sampleBanner').hidden=!S.sample;
+  $('btnClearXlsx').hidden = S.sample || !S.pas.length;
+  $('btnClearClips').hidden = S.sample || !S.clips.length;
   const P=activePAs(), C=activeClips(), pr=pairs();
   const shown=S.pas.filter(p=>S.opts.half==='all'||p.half===S.opts.half);
   $('st1').textContent = S.meta.top ? `${S.meta.date} ${S.meta.top} vs ${S.meta.bot}` : '';
@@ -527,6 +539,8 @@ function render(){
   const diff=P.length-C.length, short=pr.filter(x=>x.dur<10).length, nodur=C.filter(c=>!c.dur).length;
   const pills=[`<span class="pill">打席 ${P.length}</span>`, `<span class="pill">動画 ${C.length}</span>`];
   if(P.length && C.length) pills.push(diff===0?`<span class="pill ok">本数一致</span>`:`<span class="pill bad">${diff>0?`動画が${diff}本足りない`:`動画が${-diff}本多い`}</span>`);
+  const gaps=S.pas.filter(p=>p.skip && (S.opts.half==='all'||p.half===S.opts.half)).length;
+  if(gaps) pills.push(`<span class="pill">撮り忘れ ${gaps}打席</span>`);
   if(short) pills.push(`<span class="pill warn">10秒未満 ${short}本</span>`);
   if(nodur) pills.push(`<span class="pill bad">長さ不明 ${nodur}本</span>`);
   $('sum').innerHTML=pills.join('');
@@ -555,28 +569,31 @@ function render(){
   renderOut(pr);
   save();
 }
-function clipHtml(c, off){
+function clipHtml(c, off, pa){
   const i=S.clips.indexOf(c);
   return `<div class="clip${off?' off':''}"><div class="nm">${esc(c.name)}</div>
     <div class="l2">${c.dur?`<span class="num dur">${fmtDur(c.dur)}</span>`:`<label class="durin">長さ<input type="number" min="0" step="0.1" inputmode="decimal" data-dur="${i}" placeholder="秒" aria-label="${esc(c.name)}の長さ（秒）">秒</label>`}${c.ctime?`<span class="num">${new Date(c.ctime).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>`:''}</div>
     <div class="mini">${c.url?`<button data-act="play" data-i="${i}" aria-label="再生">▶</button>`:''}
       <button data-act="up" data-i="${i}" aria-label="上へ">▲</button><button data-act="down" data-i="${i}" aria-label="下へ">▼</button>
+      ${pa?`<button data-act="gap" data-id="${pa.id}" title="この打席は撮り忘れとして空け、この動画を次の打席へずらす">↓空きを入れる</button>`:''}
       <button data-act="cskip" data-i="${i}">${off?'使う':'使わない'}</button></div></div>`;
 }
 function rowHtml(p, c, x, offs){
   const pa = p ? `<div class="pa${p.skip?' off':''}"><div class="l1"><span class="bt">${esc(p.batter)}</span><span class="l2">第${p.nth}打席</span><span class="rs">${esc(resultText(p))}</span></div>
       <div class="l2">${p.outs}死 ${RUN_TXT(p.run)}・投手 ${esc(p.pitcher)}・${p.pitches}球</div>
-      <div class="mini"><button data-act="pskip" data-id="${p.id}">${p.skip?'動画あり':'動画なし'}</button></div></div>`
+      ${p.skip?'':`<div class="mini"><button data-act="pskip" data-id="${p.id}">撮り忘れ</button></div>`}</div>`
     : `<div class="pa"><span class="hint">${c?'対応する打席なし':''}</span></div>`;
-  let cl = c ? clipHtml(c,false) : (p && !p.skip ? `<div class="clip empty">動画なし（足りません）</div>` : `<div class="clip"></div>`);
-  if(offs && offs.length) cl = `<div class="clip-stack">${offs.map(o=>clipHtml(o,true)).join('')}${c?clipHtml(c,false):''}</div>`;
+  let cl = c ? clipHtml(c,false,p) : (p && p.skip ? `<div class="clip"><div class="gap"><b>撮り忘れ（空き）</b><button data-act="pskip" data-id="${p.id}" style="min-height:30px;padding:2px 8px;font-size:12px">空きを消して詰める</button></div></div>`
+    : p ? `<div class="clip empty">動画なし（足りません）</div>` : `<div class="clip"></div>`);
+  if(offs && offs.length) cl = `<div class="clip-stack">${offs.map(o=>clipHtml(o,true)).join('')}${c?clipHtml(c,false,p):''}</div>`;
   const t = x ? `<div class="t num">${fmt(x.start)}</div>` : `<div class="t"></div>`;
-  return `<div class="map-row${x&&x.dur<10?' short':''}">${t}${pa}${cl}</div>`;
+  return `<div class="map-row${x&&x.dur<10?' short':''}${p&&p.skip?' gaprow':''}">${t}${pa}${cl}</div>`;
 }
 $('map').addEventListener('click', e=>{
   const b=e.target.closest('button[data-act]'); if(!b) return;
   const a=b.dataset.act;
-  if(a==='pskip'){ const p=S.pas.find(q=>q.id===+b.dataset.id); p.skip=!p.skip; }
+  if(a==='pskip'||a==='gap'){ const p=S.pas.find(q=>q.id===+b.dataset.id); p.skip = a==='gap' ? true : !p.skip;
+    if(a==='gap') toast(`${p.inning}回${p.half} ${p.batter} を撮り忘れにして、動画を1つ下へずらしました`); }
   else {
     const i=+b.dataset.i, c=S.clips[i];
     if(a==='cskip') c.skip=!c.skip;
@@ -777,7 +794,8 @@ bind('oScale','scale','change',t=>t.checked);
 $('fJoined').addEventListener('change', e=>{ const f=e.target.files[0]; e.target.value=''; if(f) loadJoined(f); });
 async function loadJoined(f){
   let info=null; try{ info=await parseAny(f); }catch(err){}
-  const url=URL.createObjectURL(f);
+  if(JOINED_URL) URL.revokeObjectURL(JOINED_URL);
+  const url=URL.createObjectURL(f); JOINED_URL=url;
   const d=(info&&info.dur)||await durByElement(url);
   if(!d){ toast('この動画の長さを読めませんでした'); return; }
   S.joinedDur=d;
@@ -791,6 +809,37 @@ async function loadJoined(f){
 $('jlinks').addEventListener('click', e=>{
   const a=e.target.closest('a[data-t]'); if(!a) return; e.preventDefault();
   const jv=$('jv'); jv.currentTime=+a.dataset.t; jv.play().catch(()=>{}); jv.scrollIntoView({block:'nearest'});
+});
+
+/* ================= 解除 ================= */
+let JOINED_URL=null;
+// confirm() が使えない環境があるため、2回押しで確定する
+function armButton(btn, label, fn){
+  const orig=btn.textContent;
+  btn.addEventListener('click', ()=>{
+    if(btn.classList.contains('arm')){ clearTimeout(btn._t); btn.classList.remove('arm'); btn.textContent=orig; fn(); return; }
+    btn.classList.add('arm'); btn.textContent=label;
+    btn._t=setTimeout(()=>{ btn.classList.remove('arm'); btn.textContent=orig; }, 4000);
+  });
+}
+function clearXlsx(){
+  WB=null; WB_ROWS=null; WB_SHEET=''; GAMES=[]; $('gameWrap').hidden=true; $('selGame').innerHTML='';
+  S.pas=[]; S.meta={}; S.sample=false;
+}
+function clearClips(){
+  S.clips.forEach(c=>{ if(c.url) URL.revokeObjectURL(c.url); });
+  S.clips=[]; S.joinedDur=null; S.opts.scale=false; S.sample=false;
+  const pv=$('pv'); pv.pause(); pv.removeAttribute('src'); pv.load(); $('pvWrap').hidden=true;
+  const jv=$('jv'); jv.pause(); jv.removeAttribute('src'); jv.load(); jv.hidden=true;
+  if(JOINED_URL){ URL.revokeObjectURL(JOINED_URL); JOINED_URL=null; }
+  $('joinedInfo').textContent=''; $('scaleWrap').hidden=true; $('oScale').checked=false;
+}
+armButton($('btnClearXlsx'), 'もう一度押すと解除', ()=>{ clearXlsx(); render(); toast('Excelを解除しました'); });
+armButton($('btnClearClips'), 'もう一度押すと解除', ()=>{ clearClips(); render(); toast('動画をすべて解除しました'); });
+armButton($('btnClearAll'), 'もう一度押すと解除します', ()=>{
+  clearXlsx(); clearClips(); S.opts.yt=''; $('ytUrl').value='';
+  try{ localStorage.removeItem('abvc-state'); }catch(e){}
+  render(); window.scrollTo({top:0}); toast('Excelと動画を解除しました。次の試合を読み込めます');
 });
 
 /* ================= ドラッグ＆ドロップ ================= */
