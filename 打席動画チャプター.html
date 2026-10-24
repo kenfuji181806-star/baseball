@@ -77,6 +77,8 @@ label.chk{display:inline-flex;align-items:center;gap:6px;font-size:14px;cursor:p
 .pa.off .bt{text-decoration:line-through}
 .clip-stack{display:flex;flex-direction:column;gap:8px;padding:8px 10px}
 .clip-stack > .clip{padding:0}
+.durin{display:inline-flex;align-items:center;gap:4px;color:var(--bad);font-weight:600}
+.durin input{width:80px;min-height:30px;padding:2px 6px;font-size:13px}
 .clip .nm{font-size:13px;overflow-wrap:anywhere}
 .clip .l2{font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
 .clip.empty{color:var(--bad);font-size:13px}
@@ -155,7 +157,7 @@ details > div{margin-top:8px}
     <div class="step-b">
       <div class="drop" data-drop="clips">
         <div><div class="dz-t">動画をここにドラッグ＆ドロップ</div><div class="dz-s">複数まとめて、またはフォルダごと落とせます。あとから落とした分も並び順に合わせて入ります</div></div>
-        <label class="btn primary">動画を選ぶ（複数可）<input type="file" id="fClips" accept="video/*,.mov,.mp4,.m4v" multiple></label>
+        <label class="btn primary">動画を選ぶ（複数可）<input type="file" id="fClips" accept="video/*,.mov,.mp4,.m4v,.mts,.m2ts" multiple></label>
       </div>
       <div class="row">
         <label class="field" style="flex-direction:row;align-items:center;gap:8px">並び順
@@ -165,7 +167,7 @@ details > div{margin-top:8px}
             <option value="keep">選んだ順</option>
           </select></label>
       </div>
-      <p class="hint">長さと撮影日時はファイルの先頭情報から読みます。iPhoneの「写真」から選ぶとファイル名が変わることがあるので、並びは撮影日時がおすすめです。</p>
+      <p class="hint">iPhoneのMOV/MP4と、ビデオカメラのMTS（AVCHD）に対応しています。MTSはブラウザで再生できないため▶での確認はできませんが、長さと撮影日時は読み取れます。長さと撮影日時はファイルの先頭情報から読みます。iPhoneの「写真」から選ぶとファイル名が変わることがあるので、並びは撮影日時がおすすめです。</p>
     </div>
   </section>
 
@@ -241,7 +243,7 @@ details > div{margin-top:8px}
         <summary>結合後の動画で確認・補正</summary>
         <div class="step-b" style="padding:0">
           <div class="drop" data-drop="joined"><div class="dz-t">結合した動画をここにドラッグ＆ドロップ</div>
-            <div class="row"><label class="btn">結合した動画を選ぶ<input type="file" id="fJoined" accept="video/*,.mov,.mp4,.m4v"></label><span class="hint" id="joinedInfo"></span></div></div>
+            <div class="row"><label class="btn">結合した動画を選ぶ<input type="file" id="fJoined" accept="video/*,.mov,.mp4,.m4v,.mts,.m2ts"></label><span class="hint" id="joinedInfo"></span></div></div>
           <label class="chk" id="scaleWrap" hidden><input type="checkbox" id="oScale">長さの差を各打席に割り振って補正する</label>
           <video id="jv" controls playsinline hidden></video>
           <p class="hint">読み込むと下の一覧の打席をタップした位置から再生します。最初と最後の打席の頭が合っていれば、YouTubeでも同じ位置になります。</p>
@@ -372,6 +374,76 @@ async function parseMovie(file){
   }
   return null;
 }
+/* ===== MTS / M2TS（ビデオカメラのAVCHD）: PTSから長さ、MDPMから撮影日時を読む ===== */
+const isTS = name => /\.(mts|m2ts|ts)$/i.test(name);
+function tsLayout(b){
+  // 192バイト（AVCHD）か188バイトのパケットか、同期バイト0x47の位置で判定
+  for(const [off,st] of [[4,192],[0,188],[0,192]]){
+    for(let base=0; base<st*2 && base+st*12<b.length; base++){
+      let ok=true; for(let k=0;k<10;k++) if(b[base+off+k*st]!==0x47){ ok=false; break; }
+      if(ok) return {start:base+off, st};
+    }
+  }
+  return null;
+}
+function readPTS(b,q){ return ((b[q]>>1)&7)*1073741824 + (((b[q+1]<<7)|(b[q+2]>>1))*32768) + ((b[q+3]<<7)|(b[q+4]>>1)); }
+function videoPTS(b){
+  const L=tsLayout(b); if(!L) return [];
+  const out=[];
+  for(let p=L.start; p+188<=b.length; p+=L.st){
+    if(b[p]!==0x47) continue;
+    if(!(b[p+1]&0x40)) continue;                 // PESの先頭パケットだけ
+    const afc=(b[p+3]>>4)&3; if(!(afc&1)) continue;
+    const q=p+4+((afc&2)?1+b[p+4]:0);
+    if(q+14>p+188) continue;
+    if(b[q]||b[q+1]||b[q+2]!==1) continue;
+    const sid=b[q+3]; if(sid<0xE0||sid>0xEF) continue;
+    if(b[q+7]&0x80) out.push(readPTS(b,q+9));
+  }
+  return out;
+}
+const bcd = v => (v>>4)*10+(v&15);
+function mdpmDate(b){
+  // ソニー・パナソニック等のAVCHDはH.264のSEIに「MDPM」で撮影日時を入れている
+  for(let i=0;i+5<b.length;i++){
+    if(b[i]!==0x4D||b[i+1]!==0x44||b[i+2]!==0x50||b[i+3]!==0x4D) continue;
+    const n=b[i+4]; let y=null,mo,d,h,mi,se;
+    for(let k=0;k<n;k++){
+      const o=i+5+k*5; if(o+5>b.length) break;
+      if(b[o]===0x18){ y=bcd(b[o+2])*100+bcd(b[o+3]); mo=bcd(b[o+4]); }
+      if(b[o]===0x19){ d=bcd(b[o+1]); h=bcd(b[o+2]); mi=bcd(b[o+3]); se=bcd(b[o+4]); }
+    }
+    if(y>1990 && y<2100 && mo>=1 && mo<=12 && d>=1 && d<=31) return new Date(y,mo-1,d,h||0,mi||0,se||0).getTime();
+  }
+  return null;
+}
+async function parseTSFile(file){
+  const CH=Math.min(file.size, 3*1024*1024);
+  const head=new Uint8Array(await file.slice(0,CH).arrayBuffer());
+  const tail=new Uint8Array(await file.slice(Math.max(0,file.size-CH)).arrayBuffer());
+  const a=videoPTS(head), z=videoPTS(tail);
+  let dur=null;
+  if(a.length && z.length){
+    const first=Math.min(...a.slice(0,60));
+    let last=Math.max(...z);
+    if(last<first) last+=8589934592;               // 33ビットの折り返し
+    const u=[...new Set(z)].sort((x,y)=>x-y); let fd=Infinity;
+    for(let k=1;k<u.length;k++){ const df=u[k]-u[k-1]; if(df>0&&df<fd) fd=df; }
+    if(!isFinite(fd)||fd>9000) fd=3003;
+    dur=(last-first+fd)/90000;
+    if(!(dur>0 && dur<6*3600)) dur=null;
+  }
+  return {dur, ctime:mdpmDate(head)};
+}
+async function parseAny(file){
+  if(isTS(file.name)) return parseTSFile(file);
+  const r=await parseMovie(file);
+  if(r && r.dur) return r;
+  // 拡張子が違っても中身がTSの場合
+  const t=await parseTSFile(file).catch(()=>null);
+  return (t && t.dur) ? t : r;
+}
+
 function durByElement(url){
   return new Promise(res=>{
     const v=document.createElement('video'); v.preload='metadata'; v.muted=true;
@@ -389,10 +461,10 @@ async function addClips(files){
   $('st2').textContent='読み取り中…';
   const add=[];
   for(const [i,f] of files.entries()){
-    let info=null; try{ info=await parseMovie(f); }catch(err){ console.warn(err); }
+    let info=null; try{ info=await parseAny(f); }catch(err){ console.warn(err); }
     const url=URL.createObjectURL(f);
     let dur=info&&info.dur;
-    if(!dur) dur=await durByElement(url);
+    if(!dur && !isTS(f.name)) dur=await durByElement(url);
     // 作業データから復元した同名の動画には、再生用のURLだけ付け直す
     const same=S.clips.find(c=>!c.url && c.name===f.name);
     if(same){ same.url=url; if(dur){ same.dur=dur; same.noDur=false; } continue; }
@@ -485,7 +557,7 @@ function render(){
 function clipHtml(c, off){
   const i=S.clips.indexOf(c);
   return `<div class="clip${off?' off':''}"><div class="nm">${esc(c.name)}</div>
-    <div class="l2"><span class="num dur">${fmtDur(c.dur)}</span>${c.ctime?`<span class="num">${new Date(c.ctime).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>`:''}</div>
+    <div class="l2">${c.dur?`<span class="num dur">${fmtDur(c.dur)}</span>`:`<label class="durin">長さ<input type="number" min="0" step="0.1" inputmode="decimal" data-dur="${i}" placeholder="秒" aria-label="${esc(c.name)}の長さ（秒）">秒</label>`}${c.ctime?`<span class="num">${new Date(c.ctime).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>`:''}</div>
     <div class="mini">${c.url?`<button data-act="play" data-i="${i}" aria-label="再生">▶</button>`:''}
       <button data-act="up" data-i="${i}" aria-label="上へ">▲</button><button data-act="down" data-i="${i}" aria-label="下へ">▼</button>
       <button data-act="cskip" data-i="${i}">${off?'使う':'使わない'}</button></div></div>`;
@@ -509,9 +581,15 @@ $('map').addEventListener('click', e=>{
     if(a==='cskip') c.skip=!c.skip;
     if(a==='up'&&i>0){ [S.clips[i-1],S.clips[i]]=[S.clips[i],S.clips[i-1]]; markManual(); }
     if(a==='down'&&i<S.clips.length-1){ [S.clips[i+1],S.clips[i]]=[S.clips[i],S.clips[i+1]]; markManual(); }
+    if(a==='play' && isTS(c.name)){ toast('MTSはブラウザでは再生できません。中身はカメラやパソコンの再生ソフトで確認してください', 4500); return; }
     if(a==='play'){ $('pvWrap').hidden=false; $('pv').src=c.url; $('pvName').textContent=c.name; $('pv').play().catch(()=>{}); $('pvWrap').scrollIntoView({block:'nearest'}); return; }
   }
   render();
+});
+$('map').addEventListener('change', e=>{
+  const t=e.target.closest('input[data-dur]'); if(!t) return;
+  const v=parseFloat(t.value); if(!(v>0)) return;
+  const c=S.clips[+t.dataset.dur]; c.dur=v; c.noDur=false; render();
 });
 function markManual(){ S.clips.forEach((c,k)=>c.pick=k); S.opts.sort='keep'; $('selSort').value='keep'; }
 $('pvClose').addEventListener('click', ()=>{ $('pv').pause(); $('pv').removeAttribute('src'); $('pv').load(); $('pvWrap').hidden=true; });
@@ -525,9 +603,11 @@ function buildCmd(){
   const listLine = n => "file '"+n.replace(/'/g, "'\\''")+"'";
   const list = C.map(c=>shq(listLine(c.name))).join(' \\\n  ');
   const out = shq(S.opts.out||'試合動画.mp4');
+  const ts = C.some(c=>isTS(c.name));
+  // MTSの音声(AC-3)はMP4向けにAACへ。変換時はインターレース(1080i)のフレームだけ解除する
   const codec = S.opts.mode==='enc'
-    ? '-c:v libx264 -preset veryfast -crf 20 -c:a aac -b:a 160k'
-    : '-c copy';
+    ? `${ts?'-vf yadif=deint=interlaced ':''}-c:v libx264 -preset veryfast -crf 20 -c:a aac -b:a 192k`
+    : (ts ? '-c:v copy -c:a aac -b:a 192k' : '-c copy');
   return `printf '%s\\n' \\\n  ${list} \\\n  > _list.txt && ffmpeg -hide_banner -f concat -safe 0 -i _list.txt ${codec} -movflags +faststart ${out}`;
 }
 function chapterLines(pr){
@@ -677,7 +757,7 @@ bind('oScale','scale','change',t=>t.checked);
 /* 結合後の動画で確認 */
 $('fJoined').addEventListener('change', e=>{ const f=e.target.files[0]; e.target.value=''; if(f) loadJoined(f); });
 async function loadJoined(f){
-  let info=null; try{ info=await parseMovie(f); }catch(err){}
+  let info=null; try{ info=await parseAny(f); }catch(err){}
   const url=URL.createObjectURL(f);
   const d=(info&&info.dur)||await durByElement(url);
   if(!d){ toast('この動画の長さを読めませんでした'); return; }
@@ -695,7 +775,7 @@ $('jlinks').addEventListener('click', e=>{
 });
 
 /* ================= ドラッグ＆ドロップ ================= */
-const isVideo = f => /^video\//.test(f.type) || /\.(mov|mp4|m4v)$/i.test(f.name);
+const isVideo = f => /^video\//.test(f.type) || /\.(mov|mp4|m4v|mts|m2ts)$/i.test(f.name);
 const isXlsx = f => /\.xlsx?$/i.test(f.name);
 const isJson = f => /\.json$/i.test(f.name);
 // フォルダを落とされた時は中のファイルを全部たどる
@@ -741,7 +821,7 @@ window.addEventListener('drop', async e=>{
   // 枠の外に落とした時も、ファイルの種類で振り分ける
   if(x) await loadXlsx(x); else if(j) await loadJsonFile(j);
   if(vids.length) await addClips(vids);
-  if(!x && !j && !vids.length) toast('動画（.mov / .mp4）かExcel（.xlsx）を落としてください', 3500);
+  if(!x && !j && !vids.length) toast('動画（.mov / .mp4 / .mts）かExcel（.xlsx）を落としてください', 3500);
   else if(zone==='clips' && !vids.length) toast('動画ファイルが見つかりませんでした');
 });
 
