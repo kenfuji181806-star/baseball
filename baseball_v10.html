@@ -680,8 +680,12 @@ tr:nth-child(even) td{background:#0e1220;}
 
     <div id="rp-batter-wrap">
       <div class="sep"></div>
-      <div class="fs11 txt-m" style="margin-bottom:4px;">打者の進塁先（打球結果）</div>
+      <div id="rp-batter-lbl" class="fs11 txt-m" style="margin-bottom:4px;">打者の進塁先（打球結果）</div>
       <div id="rp-batter-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      <div id="rp-outtype-wrap" style="display:none;margin-top:8px;">
+        <div class="fs11 txt-m" style="margin-bottom:4px;">走者のアウトの種類</div>
+        <div id="rp-outtype-chips" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      </div>
     </div>
     <div class="sep"></div>
     <div class="row" style="align-items:center;">
@@ -1867,6 +1871,9 @@ const BATTER_OUT = new Set(['ゴロアウト','フライアウト','ライナー
 const RUNNER_ONLY = new Set(['盗塁死','牽制アウト','走塁死（挟殺等）']);
 // 打者がアウトにならず出塁する（打者の進塁先の初期値＝1塁）
 const BATTER_TO_FIRST = new Set(['失策','野選','振り逃げ','セーフティーバント','打撃妨害']);
+// ★走者がアウト（封殺・タッチアウト）になり、打者が生きることがある打球結果
+//   記録上は打数1・凡退（安打なし）、アウトは走者の分だけ数える
+const BATTER_SAFE_OK = new Set(['ゴロアウト','ライナーアウト','犠打']);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* ============================================================
@@ -1914,6 +1921,8 @@ let fromRunnerMove='';  // 走者移動の種類
 let rpState=[false,false,false]; // ランナー配置作業用状態
 let rpStateNames=['','','']; // ランナー名作業用
 let rpBatterBase=null;  // 打者の進塁先 0=1塁,1=2塁,2=3塁,3=本塁
+let rpBatterCanSafe=false;   // ★打球アウトだが走者がアウトになり打者が生きるケースを選べるか
+let rpRunnerOutType='封殺';  // ★そのときの走者のアウトの種類（封殺／タッチアウト）
 let rpBatterName='';    // 打者名
 // ★ 投球時点（結果を反映する前）のランナー状況。記録(history)にはこちらを保存する
 let rpSel=-1;                 // ランナー配置画面で移動元として選択中の塁(0-2)
@@ -2627,6 +2636,8 @@ function openRunnerPlace(result, batterBase=null){
   rpSel=-1; rpBatterPending=false;
   rpScored=[]; rpOutList=[]; rpErrors=[];
   rpBatterBase = (batterBase!=null) ? batterBase : (BATTER_TO_FIRST.has(result) ? 0 : null);
+  rpBatterCanSafe = !fromRunnerMove && BATTER_SAFE_OK.has(result) && G.runners.some(Boolean);
+  rpRunnerOutType = '封殺';
   // 四死球：打者を1塁へ置き、押し出しが起きる場合は走者を（名前ごと）自動で進める
   if(WALK_FORCE_RESULTS.has(result)){
     const w=forceWalk(G.runners, G.runnerNames, rpBatterName);
@@ -2648,7 +2659,7 @@ function openRunnerPlace(result, batterBase=null){
     '四球':'打者は1塁へ。押し出しは自動で得点・打点になります',
     '故意四球':'打者は1塁へ。押し出しは自動で得点・打点になります',
     '死球':'打者は1塁へ。押し出しは自動で得点・打点になります',
-    'ゴロアウト':'進塁した走者を移動。生還は「🏠 生還」、アウトになった走者は「✕ アウト」',
+    'ゴロアウト':'進塁した走者を移動。アウトになった走者は「✕ アウト」。走者がアウトで打者が生きたときは、下の「打者」で塁を選択',
     'フライアウト':'タッチアップがあれば走者を移動（生還は「🏠 生還」）',
     'ライナーアウト':'走者の最終位置を設定。飛び出してアウトなら「✕ アウト」',
     '内野フライ':'走者の最終位置を設定してください',
@@ -2669,7 +2680,26 @@ function openRunnerPlace(result, batterBase=null){
 function _rpBatterChips(){
   const wrap=document.getElementById('rp-batter-wrap');
   const chips=document.getElementById('rp-batter-chips');
+  const lbl=document.getElementById('rp-batter-lbl');
+  const ot=document.getElementById('rp-outtype-wrap');
   if(!wrap||!chips) return;
+  if(ot) ot.style.display='none';
+  // ★打球アウト：打者アウト（通常）か、走者がアウトで打者セーフかを選ぶ
+  if(rpBatterCanSafe){
+    wrap.style.display='';
+    if(lbl) lbl.textContent='打者（走者がアウトになり打者が生きた場合は塁を選択）';
+    const opts=[[null,'打者アウト（通常）'],[0,'1塁セーフ'],[1,'2塁セーフ'],[2,'3塁セーフ']];
+    chips.innerHTML=opts.map(([v,l])=>
+      `<button class="runner-chip${rpBatterBase===v?' on':''}" onclick="setBatterBase(${v===null?'null':v})">${l}</button>`).join('');
+    if(ot && rpBatterBase!==null){
+      ot.style.display='';
+      const oc=document.getElementById('rp-outtype-chips');
+      if(oc) oc.innerHTML=['封殺','タッチアウト'].map(t=>
+        `<button class="runner-chip${rpRunnerOutType===t?' on':''}" onclick="setRunnerOutType('${t}')">${t}</button>`).join('');
+    }
+    return;
+  }
+  if(lbl) lbl.textContent='打者の進塁先（打球結果）';
   if(rpBatterBase===null || fromRunnerMove){ wrap.style.display='none'; chips.innerHTML=''; return; }
   wrap.style.display='';
   const labels=['1塁','2塁','3塁','本塁（生還）','アウト（走塁死）'];
@@ -2705,6 +2735,10 @@ function rpToggleErr(c){
 function setBatterBase(idx){
   rpBatterBase=idx;
   _rpBatterChips(); syncRPDiamond();
+}
+function setRunnerOutType(t){
+  rpRunnerOutType=t;
+  _rpBatterChips();
 }
 
 function toggleRPBase(i){
@@ -3000,9 +3034,16 @@ function confirmRunnerPlace(){
     toast('⚠ 失策した野手を下の一覧から選んでください', 4200);
     return;
   }
+  // ★走者アウト・打者セーフ（封殺／タッチアウト）
+  const batterSafe = rpBatterCanSafe && bb!==null;
+  if(batterSafe && rpOutList.length===0){
+    toast('⚠ アウトになった走者をタップして「✕ アウト」を押してください（誰もアウトでなければ「野選」か「失策」を選んでください）', 5000);
+    return;
+  }
   const st=[...rpState], nm=[...rpStateNames];
   if(bb!==null && bb<3){ st[bb]=true; nm[bb]=rpBatterName; }
   const extra={
+    batterSafe, runnerOutType: batterSafe ? rpRunnerOutType : '',
     runners:st,
     runnerNames:nm.map((n,i)=>st[i]?(n||''):''),
     scoredNames:[...rpScored, ...(bb===3?[rpBatterName]:[])],
@@ -3011,8 +3052,11 @@ function confirmRunnerPlace(){
   };
   const rbi=parseInt(document.getElementById('rp-rbi')?.value)||0;
   if(fromRunnerMove){ commitEvent(fromRunnerMove, extra); return; }
-  const hitq=document.getElementById('sel-hitq')?.value||'';
-  doCommit(pendingFinalResult, rbi, hitq, P.hitX, P.hitY, extra);
+  let hitq=document.getElementById('sel-hitq')?.value||'';
+  let res=pendingFinalResult;
+  // バントで前の走者がアウト・打者が生きた → 犠打ではなく凡打（打数1）
+  if(batterSafe && res==='犠打'){ res='ゴロアウト'; hitq='バント'; }
+  doCommit(res, rbi, hitq, P.hitX, P.hitY, extra);
 }
 
 /* ============================================================
@@ -3090,6 +3134,7 @@ function doCommit(result, rbi, hitq, hitX, hitY, extra){
       rbi:rbi||0, hitQuality:hitq||'',
       pa:_paOf(result, G.balls, G.strikes),
       errors:extra.errors||[],
+      batterSafe:!!extra.batterSafe, runnerOutType:extra.runnerOutType||'',
     });
     const addScore=_mkScorer(rec,false);
 
@@ -3127,7 +3172,7 @@ function doCommit(result, rbi, hitq, hitX, hitY, extra){
         G.runners=[...extra.runners]; G.runnerNames=[...extra.runnerNames];
         (extra.scoredNames||[]).forEach(addScore);
       }
-      const forced = applyResult(result, (extra.outNames||[]).length, addScore);
+      const forced = applyResult(result, (extra.outNames||[]).length, addScore, !!extra.batterSafe);
       if(typeof forced==='number' && forced>0) rec.rbi=forced;   // ボール4つの押し出し
     }
     // 失策・打撃妨害で出塁した打者 → その走者の得点は自責点にならない
@@ -3261,7 +3306,7 @@ function confirmKensei(){
 /* （v10：走塁イベントの反映は doCommit 内で行う） */
 
 /* 結果 → 試合状態（B/S/O・打順）を更新。得点は scored（addScore）で数える */
-function applyResult(result, extraOuts, addScore){
+function applyResult(result, extraOuts, addScore, batterSafe){
   extraOuts = extraOuts || 0;
   if(COUNT_ONLY.has(result)){
     if(result==='ボール' || result==='ピッチクロック'){
@@ -3299,7 +3344,7 @@ function applyResult(result, extraOuts, addScore){
   if(RUNNER_ONLY.has(result)){
     G.outs += Math.max(1, extraOuts);
   } else {
-    G.outs += (BATTER_OUT.has(result)?1:0) + extraOuts;
+    G.outs += (BATTER_OUT.has(result) && !batterSafe ? 1 : 0) + extraOuts;
     advanceBatter();
   }
   if(G.outs>=3) changeHalf();
@@ -4553,7 +4598,7 @@ function renderDataTable(){
     <td>${safeFix(r.catcherX)}</td><td>${safeFix(r.catcherY)}</td>
     <td>${safeFix(r.pitchX)}</td><td>${safeFix(r.pitchY)}</td>
     <td>${safeFix(r.hitX)}</td><td>${safeFix(r.hitY)}</td>
-    <td>${safe(r.result)}</td><td>${safe(r.strategy)}</td>
+    <td>${safe(r.result)}${r.batterSafe?`（走者${esc(r.runnerOutType||'アウト')}・打者出塁）`:''}</td><td>${safe(r.strategy)}</td>
     <td>${r.rbi||0}</td><td>${safe(r.hitQuality)}</td>
     <td>${safe(r.runnerMoveReason)}</td>
     <td>${r.baserunEvents&&r.baserunEvents.length ? r.baserunEvents.map(e=>`${e.from}→${e.to} ${e.outcome}(${e.reason})`).join(' / ') : ''}</td>
@@ -4637,11 +4682,13 @@ const XLSX_HEADERS = [
    ★修正: 今まで「走塁イベント」の値が抜けていて、B以降が1列ずれていた */
 /* ★v10 追加列（既存の37列の後ろに追加。旧アプリ・分析アプリの列位置は変わらない） */
 const XLSX_EXT_HEADERS = ['試合ID','打席結果','得点','得点者','盗塁','盗塁死','失策野手','アウト数','投球',
-  '暴投','ボーク','捕逸','構えゾーン','投球ゾーン','構えX%','構えY%','コースX%','コースY%','打球X%','打球Y%','詳細JSON'];
+  '暴投','ボーク','捕逸','構えゾーン','投球ゾーン','構えX%','構えY%','コースX%','コースY%','打球X%','打球Y%','詳細JSON',
+  '走者アウト・打者出塁'];
 function _recExtRow(r){
   const sc=Array.isArray(r.scored)?r.scored:[];
   const det={pa:r.pa??null, runs:r.runs??null, scored:r.scored??null, sb:r.sb||[], cs:r.cs||[],
-    errors:r.errors||[], outsMade:r.outsMade??null, isPitch:r.isPitch??null, wp:r.wp||0, bk:r.bk||0, pb:r.pb||0};
+    errors:r.errors||[], outsMade:r.outsMade??null, isPitch:r.isPitch??null, wp:r.wp||0, bk:r.bk||0, pb:r.pb||0,
+    batterSafe:!!r.batterSafe, runnerOutType:r.runnerOutType||''};
   const n=v=>(v==null||v==='')?'':v;
   return [
     r.gameId||'', r.pa||'', n(r.runs),
@@ -4651,6 +4698,7 @@ function _recExtRow(r){
     n(r.outsMade), r.isPitch===false?0:1, r.wp||0, r.bk||0, r.pb||0,
     n(r.cZone), n(r.pZone), n(r.cxn), n(r.cyn), n(r.pxn), n(r.pyn), n(r.hitXn), n(r.hitYn),
     JSON.stringify(det),
+    r.batterSafe ? (r.runnerOutType||'走者アウト') : '',
   ];
 }
 function _recToXlsxRow(r, ext=true){
